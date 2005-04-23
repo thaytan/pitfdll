@@ -79,7 +79,7 @@ version_check automake AUTOMAKE \
 ACLOCAL=`echo $AUTOMAKE | sed s/automake/aclocal/`
 
 # Run
-${ACLOCAL} -Im4 || exit 1
+${ACLOCAL} -I m4 || exit 1
 ${AUTOHEADER} || exit 1
 ${LIBTOOLIZE} --force --copy || exit 1
 ${AUTOCONF} || exit 1

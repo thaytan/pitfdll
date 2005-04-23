@@ -1,0 +1,7 @@
+2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
+
+	* Makefile.am:
+	* autogen.sh:
+	* configure.ac:
+	  Remove last GStreamer-CVS leftovers in build process.
+

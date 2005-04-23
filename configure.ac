@@ -37,7 +37,7 @@ AC_CONFIG_SRCDIR(configure.ac)
 AM_CONFIG_HEADER(config.h)
 
 dnl Add parameters for aclocal
-AC_SUBST(ACLOCAL_AMFLAGS, "-I m4 -I common/m4 $ACLOCAL_FLAGS")
+AC_SUBST(ACLOCAL_AMFLAGS, "-I m4 $ACLOCAL_FLAGS")
 
 AC_PROG_CC
 AM_PROG_CC_STDC
@@ -56,7 +56,7 @@ if test "x$GST_WALL" = "xyes"; then
 fi
 
 AC_HEADER_STDC([])
-
+AC_CHECK_HEADERS(sys/mman.h)
 
 dnl check for gstreamer; uninstalled is selected preferentially -- see pkg-config(1)
 PKG_CHECK_MODULES(GST, gstreamer-$GST_MAJORMINOR >= $GST_REQ,
@@ -74,13 +74,9 @@ AC_SUBST(plugindir)
 GST_PLUGIN_LDFLAGS='-module -avoid-version -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).*'
 AC_SUBST(GST_PLUGIN_LDFLAGS)
 
-dnl Determine CPU
-GST_ARCH()
-
-AC_CHECK_HEADERS(sys/mman.h)
-
 AC_CONFIG_FILES(
 Makefile
+m4/Makefile
 ext/Makefile
 ext/pitfdll/Makefile
 gst-libs/Makefile
