@@ -1,6 +1,14 @@
 2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
 
 	* Makefile.am:
+	* RELEASE:
+	* TODO:
+	* configure.ac:
+	  Release 0.8.1.
+
+2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
+
+	* Makefile.am:
 	* configure.ac:
 	* m4/Makefile.am:
 	  Some build fixes, remove build setup stuff from dist.

@@ -12,7 +12,7 @@ AM_MAINTAINER_MODE
 
 dnl when going to/from release please set the nano (fourth number) right !
 dnl releases only do Wall, cvs and prerelease does Werror too
-AS_VERSION(pitfdll, PITFDLL_VERSION, 0, 8, 0, 1, HAVE_CVS="no", HAVE_CVS="yes")
+AS_VERSION(pitfdll, PITFDLL_VERSION, 0, 8, 1, 0, HAVE_CVS="no", HAVE_CVS="yes")
 dnl we cheat here so we don't have to change the actual configure code bit
 GST_PLUGINS_VERSION_NANO=$PITFDLL_VERSION_NANO
 

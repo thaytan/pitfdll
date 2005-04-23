@@ -3,7 +3,7 @@ SUBDIRS = gst-libs ext
 EXTRA_DIST = \
 	pitfdll.spec pitfdll.spec.in \
 	depcomp \
-	INSTALL AUTHORS COPYING NEWS README ChangeLog
+	INSTALL AUTHORS COPYING NEWS README RELEASE TODO ChangeLog
 
 AUTOMAKE_OPTIONS = dist-bzip2
 

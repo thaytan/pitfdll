@@ -1,0 +1,8 @@
+New modules:
+* vfw, vfwex video/audio
+* dmo/dshow audio
+* qtx video
+* real?
+
+Existing modules:
+* more formats in existing modules

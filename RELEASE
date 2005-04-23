@@ -1,0 +1,22 @@
+Pitfdll 0.8.1
+=============
+
+This is pitfdll 0.8.1; pitfdll is a GStreamer plugin that loads binary files
+(such as DLL and QTX) and enables playback through them in popular playback
+applications such as Totem (http://gnome.org/projects/totem/).
+
+This release features:
+* Quicktime (QTX) audio support
+   - QDesign Music 2
+* DirectShow and DMO (DLL) video support
+   - Windows Media Video 9
+   - Intel Indeo 5.0
+
+The projects is hosted on SourceForge: http://sf.net/projects/pitfdll/,
+its homepage is location on http://ronald.bitfreak.net/pitfdll.php. Bugs
+are tracked on SourceForge. There is no mailinglist or support available
+for now.
+
+--
+Ronald S. Bultje <rbultje@ronald.bitfreak.net>
+Saturday, April 23rd, 2005
