@@ -1,0 +1,36 @@
+GStreamer DLL loader plugin:
+============================
+
+How to get this working:
+
+* install a codecpack, e.g. the ones from the mplayer website
+* install this
+* run gst-register
+
+gst-inspect pitfdll should show plugins, if all went well. Test pipelines:
+
+gst-launch filesrc location=file.asf ! asfdemux .video_00 ! dmodec_wmv9dmod
+   ! ffmpegcolorspace ! xvimagesink (Windows Media Video 9)
+gst-launch filesrc location=file.mov ! qtdemux .audio_00 ! qtadec_bin !
+   audioconvert ! audioscale ! alsasink (QDesign Music 2)
+gst-launch filesrc location=file.avi ! avidemux .video_00 ! dshowdec_ir50_32
+   ! ffmpegcolorspace ! xvimagesink (Intel Indeo Video 5.0)
+
+Notes:
+======
+* I didn't do anything. Code is a direct cp -a from the Xine tree. I
+   fail to understand even the smallest bits. Don't ask me questions,
+   I will not know.
+* Say thanks to the Xine team for the nice code.
+* Threaded use fails completely, it'll crash on Check_FS_Segment():
+ldt_keeper: FS segment is not set or has being lost!
+            Please report this error to xine-devel@lists.sourceforge.net
+            Aborting....
+   I don't know what that means. Removing Check_FS_Segment() will cause
+   segfaults on the first call to *_Decode(), so don't bother trying.
+
+License:
+========
+Since it's based on Xine code, all this is GPL. The code in ext/pitfdll/
+is original, self-written code, so the headers say LGPL. The end product,
+however, is GPL until someone provides me a LGPL .dll loader.
