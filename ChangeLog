@@ -1,5 +1,12 @@
 2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
 
+	* configure.ac:
+	  Development mode.
+
+=== Release 0.8.1 ===
+
+2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
+
 	* Makefile.am:
 	* RELEASE:
 	* TODO:
