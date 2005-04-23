@@ -1,6 +1,13 @@
 2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
 
 	* Makefile.am:
+	* configure.ac:
+	* m4/Makefile.am:
+	  Some build fixes, remove build setup stuff from dist.
+
+2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
+
+	* Makefile.am:
 	* autogen.sh:
 	* configure.ac:
 	  Remove last GStreamer-CVS leftovers in build process.

@@ -76,7 +76,6 @@ AC_SUBST(GST_PLUGIN_LDFLAGS)
 
 AC_CONFIG_FILES(
 Makefile
-m4/Makefile
 ext/Makefile
 ext/pitfdll/Makefile
 gst-libs/Makefile

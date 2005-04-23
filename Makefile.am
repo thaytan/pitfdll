@@ -1,8 +1,9 @@
-SUBDIRS = gst-libs ext m4
-EXTRA_DIST = pitfdll.spec pitfdll.spec.in \
+SUBDIRS = gst-libs ext
+
+EXTRA_DIST = \
+	pitfdll.spec pitfdll.spec.in \
 	depcomp \
-	configure.ac autogen.sh \
-	AUTHORS COPYING NEWS README ChangeLog
+	INSTALL AUTHORS COPYING NEWS README ChangeLog
 
 AUTOMAKE_OPTIONS = dist-bzip2
 
