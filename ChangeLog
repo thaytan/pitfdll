@@ -1,3 +1,11 @@
+2005-04-24  Arwed v. Merkatz  <arwed@users.sourceforge.net>
+
+	Reviewed by:  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
+
+	* gst-libs/ext/loader/wine/ext.c: (VirtualAlloc):
+	* gst-libs/ext/loader/wine/win32.c: (expGetWindowThreadProcessId):
+	  GCC4 fixes for left-value cast in assignment (#1188654).
+
 2005-04-23  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
 
 	* configure.ac:
