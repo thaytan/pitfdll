@@ -97,7 +97,7 @@ typedef struct _QtAudioDecClass {
   GstElementClass parent;
 } QtAudioDecClass;
 
-static void qt_audiodec_dispose (GObject * obj);
+static void qt_audiodec_finalize (GObject * obj);
 static GstPadLinkReturn qt_audiodec_link (GstPad * pad, const GstCaps * caps);
 static void qt_audiodec_chain (GstPad * pad, GstData * data);
 static GstElementStateReturn qt_audiodec_change_state (GstElement * element);
@@ -148,7 +148,7 @@ qt_audiodec_class_init (QtAudioDecClass * klass)
   parent_class = g_type_class_ref (GST_TYPE_ELEMENT);
 
   eklass->change_state = qt_audiodec_change_state;
-  oklass->dispose = qt_audiodec_dispose;
+  oklass->finalize = qt_audiodec_finalize;
 }
 
 static void
@@ -175,7 +175,7 @@ qt_audiodec_init (QtAudioDec * dec)
 }
 
 static void
-qt_audiodec_dispose (GObject * obj)
+qt_audiodec_finalize (GObject * obj)
 {
   QtAudioDec *dec = (QtAudioDec *) obj;
 
@@ -184,7 +184,7 @@ qt_audiodec_dispose (GObject * obj)
     dec->lock = NULL;
   }
 
-  G_OBJECT_CLASS (parent_class)->dispose (obj);
+  G_OBJECT_CLASS (parent_class)->finalize (obj);
 }
 
 /*

@@ -1,3 +1,9 @@
+2005-04-25  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
+
+	* ext/pitfdll/qt_adec.c: (qt_audiodec_class_init),
+	(qt_audiodec_finalize):
+	  Fix crash when disposing while not in NULL (#1189545).
+
 2005-04-24  Arwed v. Merkatz  <arwed@users.sourceforge.net>
 
 	Reviewed by:  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
