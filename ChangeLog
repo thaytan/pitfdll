@@ -1,3 +1,41 @@
+2005-08-12  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_base_init),
+	(dmo_audiodec_class_init), (dmo_audiodec_init),
+	(dmo_audiodec_dispose), (dmo_audiodec_link), (dmo_audiodec_chain),
+	(dmo_audiodec_change_state), (dmo_adec_register):
+	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_base_init),
+	(dmo_videodec_link), (dmo_videodec_chain), (dmo_vdec_register):
+	* ext/pitfdll/dshow_vdec.c: (dshow_videodec_base_init),
+	(dshow_videodec_link), (dshow_vdec_register):
+	* ext/pitfdll/general.h:
+	* ext/pitfdll/pitfdll.c: (plugin_init):
+	* ext/pitfdll/pitfdll.h:
+	* gst-libs/ext/loader/dmo/DMO_AudioDecoder.c:
+	(DMO_AudioDecoder_GetOutputInfos), (DMO_AudioDecoder_Open),
+	(DMO_AudioDecoder_Destroy), (DMO_AudioDecoder_Convert):
+	* gst-libs/ext/loader/dmo/DMO_AudioDecoder.h:
+	* gst-libs/ext/loader/dmo/DMO_Filter.h:
+	* gst-libs/ext/loader/dmo/DMO_VideoDecoder.c:
+	(DMO_VideoDecoder_Open), (DMO_VideoDecoder_Destroy),
+	(DMO_VideoDecoder_DecodeInternal):
+	* gst-libs/ext/loader/dmo/DMO_VideoDecoder.h:
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.c:
+	(DMO_VideoEncoder_GetOutputInfos), (DMO_VideoEncoder_Open),
+	(DMO_VideoEncoder_Destroy), (DMO_VideoEncoder_EncodeInternal):
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.h:
+	* gst-libs/ext/loader/dmo/Makefile.am:
+	* gst-libs/ext/loader/dmo/dmo.c: (DMO_Filter_Destroy),
+	(DMO_Filter_InspectPins), (DMO_Filter_SetInputType),
+	(DMO_Filter_SetOutputType), (DMO_Filter_Create):
+	* gst-libs/ext/loader/dmo/dmo_guids.h:
+	* gst-libs/ext/loader/dshow/guids.c:
+	* gst-libs/ext/loader/dshow/guids.h:
+	* gst-libs/ext/loader/libwin32.h: First bunch of work. We now have a
+	working audio decoder wrapping wma version 1, 2 and 3. We also have a
+	working video decoder wrapping wmv version 1, 2 and 3. We are also
+	preparing the basis to get encoders (the elements will come later).
+
 2005-04-25  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
 
 	* ext/pitfdll/qt_adec.c: (qt_audiodec_class_init),

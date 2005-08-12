@@ -36,6 +36,7 @@ plugin_init (GstPlugin * plugin)
   dshow_adec_register (plugin);
 
   dmo_vdec_register (plugin);
+  dmo_venc_register (plugin);
   dmo_adec_register (plugin);
 
   qt_adec_register (plugin);
@@ -49,5 +50,3 @@ GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     "DLL-loader elements",
     plugin_init,
     PITFDLL_VERSION, "GPL", "PitfDLL", "http://ronald.bitfreak.net/pitfdll/")
-
-

@@ -68,11 +68,14 @@ dmo_videodec_base_init (DMOVideoDecClass * klass)
 
   /* element details */
   klass->entry = tmp;
-  details.longname = g_strdup_printf ("DMO %s decoder", tmp->dll);
+  details.longname = g_strdup_printf ("DMO %s decoder version %d", tmp->dll,
+                                      tmp->version);
   details.klass = "Codec/Decoder/Video";
-  details.description = details.longname;
+  details.description = g_strdup_printf ("DMO %s decoder version %d",
+                                         tmp->friendly_name, tmp->version);
   details.author = "Ronald Bultje <rbultje@ronald.bitfreak.net>";
   gst_element_class_set_details (eklass, &details);
+  g_free (details.description);
   g_free (details.longname);
 
   /* sink caps */
@@ -84,7 +87,7 @@ dmo_videodec_base_init (DMOVideoDecClass * klass)
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
 
   /* source, simple */
-  srccaps = gst_caps_from_string ("video/x-raw-rgb; video/x-raw-yuv");
+  srccaps = gst_caps_from_string ("video/x-raw-yuv, format=(fourcc)YUY2");
   src = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, srccaps);
 
   /* register */
@@ -178,14 +181,13 @@ dmo_videodec_link (GstPad * pad, const GstCaps * caps)
   hdr->image_size = dec->w * dec->h;
   hdr->planes = 1;
   hdr->bit_cnt = 16;
-  hdr->compression = klass->entry->fourcc;
+  hdr->compression = klass->entry->format;
   GST_DEBUG ("Will now open %s using %dx%d@%lffps",
 	     dll, dec->w, dec->h, dec->fps);
-  if (!(dec->ctx = DMO_VideoDecoder_Open (dll, &klass->entry->guid,
-					  hdr, 0, 0))) {
+  if (!(dec->ctx = DMO_VideoDecoder_Open (dll, &klass->entry->guid, hdr))) {
+    GST_ERROR ("Failed to open DLL %s", dll);
     g_free (dll);
     g_free (hdr);
-    GST_ERROR ("Failed to open DLL %s", dll);
     return GST_PAD_LINK_REFUSED;
   }
   g_free (dll);
@@ -204,11 +206,6 @@ dmo_videodec_link (GstPad * pad, const GstCaps * caps)
   }
   gst_caps_free (out);
 
-  /* start */
-  DMO_VideoDecoder_SetDestFmt (dec->ctx, 16,
-			       GST_MAKE_FOURCC ('Y', 'U', 'Y', '2'));
-  DMO_VideoDecoder_StartInternal (dec->ctx);
-
   return GST_PAD_LINK_OK;
 }
 
@@ -221,8 +218,6 @@ dmo_videodec_chain (GstPad * pad, GstData * data)
   GstBuffer *in, *out;
 
   Check_FS_Segment ();
-
-  GST_DEBUG ("Receive data");
 
   /* decode */
   in = GST_BUFFER (data);
@@ -268,12 +263,20 @@ dmo_videodec_change_state (GstElement * element)
 static const CodecEntry codecs[] = {
   { "wmv9dmod", { 0x724bb6a4, 0xe526, 0x450f,
 		  0xaf, 0xfa, 0xab, 0x9b, 0x45, 0x12, 0x91, 0x11 },
-    GST_MAKE_FOURCC ('W', 'M', 'V', '3'),
+    GST_MAKE_FOURCC ('W', 'M', 'V', '3'), 3, "Windows Media Video",
     "video/x-wmv, wmvversion=(int)3" },
   { "wmvdmod", { 0x82d353df, 0x90bd, 0x4382,
 		 0x8b, 0xc2, 0x3f, 0x61, 0x92, 0xb7, 0x6e, 0x34 },
-    GST_MAKE_FOURCC ('W', 'M', 'V', '3'),
-    "video/x-wmv, wmvversion=(int)3" },
+    GST_MAKE_FOURCC ('W', 'M', 'V', '1'), 1, "Windows Media Video",
+    "video/x-wmv, wmvversion = (int) 1" },
+  { "wmvdmod", { 0x82d353df, 0x90bd, 0x4382,
+		 0x8b, 0xc2, 0x3f, 0x61, 0x92, 0xb7, 0x6e, 0x34 },
+    GST_MAKE_FOURCC ('W', 'M', 'V', '2'), 2, "Windows Media Video",
+    "video/x-wmv, wmvversion = (int) 2" },
+  { "wmvdmod", { 0x82d353df, 0x90bd, 0x4382,
+		 0x8b, 0xc2, 0x3f, 0x61, 0x92, 0xb7, 0x6e, 0x34 },
+    GST_MAKE_FOURCC ('W', 'M', 'V', '3'), 3, "Windows Media Video",
+    "video/x-wmv, wmvversion = (int) 3" },
   { NULL }
 };
 
@@ -305,7 +308,8 @@ dmo_vdec_register (GstPlugin * plugin)
     GST_DEBUG ("Registering %s (%s)", full_path, codecs[n].dll);
     g_free (full_path);
 
-    element_name = g_strdup_printf ("dmodec_%s", codecs[n].dll);
+    element_name = g_strdup_printf ("dmodec_%sv%d", codecs[n].dll,
+                                    codecs[n].version);
     tmp = &codecs[n];
     type = g_type_register_static (GST_TYPE_ELEMENT, element_name, &info, 0);
     if (!gst_element_register (plugin, element_name, GST_RANK_SECONDARY, type)) {

@@ -58,6 +58,7 @@ extern const GUID CLSID_MemoryAllocator;
 extern const GUID MEDIATYPE_Video;
 extern const GUID GUID_NULL;
 extern const GUID FORMAT_VideoInfo;
+extern const GUID FORMAT_None;
 extern const GUID MEDIASUBTYPE_RGB1;
 extern const GUID MEDIASUBTYPE_RGB4;
 extern const GUID MEDIASUBTYPE_RGB8;

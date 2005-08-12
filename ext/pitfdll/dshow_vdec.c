@@ -68,11 +68,14 @@ dshow_videodec_base_init (DSVideoDecClass * klass)
 
   /* element details */
   klass->entry = tmp;
-  details.longname = g_strdup_printf ("DS %s decoder", tmp->dll);
+  details.longname = g_strdup_printf ("DS %s decoder version %d", tmp->dll,
+                                      tmp->version);
   details.klass = "Codec/Decoder/Video";
-  details.description = details.longname;
+  details.description = g_strdup_printf ("DS %s decoder version %d",
+                                         tmp->friendly_name, tmp->version);
   details.author = "Ronald Bultje <rbultje@ronald.bitfreak.net>";
   gst_element_class_set_details (eklass, &details);
+  g_free (details.description);
   g_free (details.longname);
 
   /* sink caps */
@@ -178,7 +181,7 @@ dshow_videodec_link (GstPad * pad, const GstCaps * caps)
   hdr->image_size = dec->w * dec->h;
   hdr->planes = 1;
   hdr->bit_cnt = 16;
-  hdr->compression = klass->entry->fourcc;
+  hdr->compression = klass->entry->format;
   GST_DEBUG ("Will now open %s using %dx%d@%lffps",
 	     dll, dec->w, dec->h, dec->fps);
   if (!(dec->ctx = DS_VideoDecoder_Open (dll, &klass->entry->guid,
@@ -268,7 +271,7 @@ dshow_videodec_change_state (GstElement * element)
 static const CodecEntry codecs[] = {
   { "ir50_32", { 0x30355649, 0x0000, 0x0010,
 		 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 },
-    GST_MAKE_FOURCC ('I', 'V', '5', '0'),
+    GST_MAKE_FOURCC ('I', 'V', '5', '0'), 5, "Indeo Video",
     "video/x-intel, ivversion=(int)5" },
   { NULL }
 };
@@ -301,7 +304,8 @@ dshow_vdec_register (GstPlugin * plugin)
     GST_DEBUG ("Registering %s (%s)", full_path, codecs[n].dll);
     g_free (full_path);
 
-    element_name = g_strdup_printf ("dshowdec_%s", codecs[n].dll);
+    element_name = g_strdup_printf ("dshowdec_%sv%d", codecs[n].dll,
+                                    codecs[n].version);
     tmp = &codecs[n];
     type = g_type_register_static (GST_TYPE_ELEMENT, element_name, &info, 0);
     if (!gst_element_register (plugin, element_name, GST_RANK_SECONDARY, type)) {

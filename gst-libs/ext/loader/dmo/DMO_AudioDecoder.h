@@ -3,15 +3,20 @@
 
 typedef struct _DMO_AudioDecoder DMO_AudioDecoder;
 
-//DMO_AudioDecoder * DMO_AudioDecoder_Create(const CodecInfo * info, const WAVEFORMATEX* wf);
-DMO_AudioDecoder * DMO_AudioDecoder_Open(char* dllname, GUID* guid, WAVEFORMATEX* wf,int out_channels);
+int DMO_AudioDecoder_GetOutputInfos (DMO_AudioDecoder * this, 
+                                     unsigned long * out_buffer_size,
+                                     unsigned long * out_align);
 
-void DMO_AudioDecoder_Destroy(DMO_AudioDecoder *this);
+DMO_AudioDecoder * DMO_AudioDecoder_Open (char * dllname, GUID * guid,
+                                          WAVEFORMATEX * wf);
 
-int DMO_AudioDecoder_Convert(DMO_AudioDecoder *this, const void* in_data, unsigned int in_size,
-			     void* out_data, unsigned int out_size,
-			     unsigned int* size_read, unsigned int* size_written);
+void DMO_AudioDecoder_Destroy (DMO_AudioDecoder * this);
 
-int DMO_AudioDecoder_GetSrcSize(DMO_AudioDecoder *this, int dest_size);
+int DMO_AudioDecoder_Convert (DMO_AudioDecoder * this, const void * in_data,
+                              unsigned int in_size, void * out_data,
+                              unsigned int out_size, unsigned int * size_read,
+                              unsigned int * size_written);
+
+int DMO_AudioDecoder_GetSrcSize (DMO_AudioDecoder *this, int dest_size);
 
 #endif // AVIFILE_DMO_AUDIODECODER_H

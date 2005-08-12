@@ -201,6 +201,8 @@ struct IRtConfig
 #define fccWMV2 mmioFOURCC('W', 'M', 'V', '2')
 #define fccwmv2 mmioFOURCC('w', 'm', 'v', '2')
 #define fccMWV1 mmioFOURCC('M', 'W', 'V', '1')
+#define fccWMV3 mmioFOURCC('W', 'M', 'V', '3')
+#define fccwmv3 mmioFOURCC('w', 'm', 'v', '3')
 
 /* Angel codecs */
 #define fccAP41	mmioFOURCC('A', 'P', '4', '1')
