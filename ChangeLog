@@ -1,5 +1,12 @@
 2005-08-30  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
 
+	* configure.ac:
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_link):
+	* ext/pitfdll/pitfdll.c: (plugin_init):
+	  Allow >2 channels for audio (makes WMAv3 with 6-chan audio work).
+
+2005-08-30  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
+
 	* ext/pitfdll/Makefile.am:
 	* ext/pitfdll/dmo_venc.c: (dmo_venc_register):
 	  Dummy file, since real file appears missing.

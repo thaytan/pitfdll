@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "general.h"
+#include <gst/audio/multichannel.h>
 #include "pitfdll.h"
 #include "DMO_AudioDecoder.h"
 #include "ldt_keeper.h"
@@ -213,6 +214,22 @@ dmo_audiodec_link (GstPad * pad, const GstCaps * caps)
       "endianness", G_TYPE_INT, 1234,
       "channels", G_TYPE_INT, dec->channels,
       NULL);
+  if (dec->channels > 2 && dec->channels <= 11) {
+    GstAudioChannelPosition pos[] = {
+      GST_AUDIO_CHANNEL_POSITION_FRONT_LEFT,
+      GST_AUDIO_CHANNEL_POSITION_FRONT_RIGHT,
+      GST_AUDIO_CHANNEL_POSITION_FRONT_CENTER,
+      GST_AUDIO_CHANNEL_POSITION_LFE,
+      GST_AUDIO_CHANNEL_POSITION_REAR_LEFT,
+      GST_AUDIO_CHANNEL_POSITION_REAR_RIGHT,
+      GST_AUDIO_CHANNEL_POSITION_FRONT_LEFT_OF_CENTER,
+      GST_AUDIO_CHANNEL_POSITION_FRONT_RIGHT_OF_CENTER,
+      GST_AUDIO_CHANNEL_POSITION_REAR_CENTER,
+      GST_AUDIO_CHANNEL_POSITION_SIDE_LEFT,
+      GST_AUDIO_CHANNEL_POSITION_SIDE_RIGHT
+    };
+    gst_audio_set_channel_positions (gst_caps_get_structure (out, 0), pos);
+  }
   if (!gst_pad_set_explicit_caps (dec->srcpad, out)) {
     gst_caps_free (out);
     GST_ERROR ("Failed to negotiate output");
