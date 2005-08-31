@@ -11,6 +11,7 @@ libpitfdll_la_SOURCES = \
 	dshow_vdec.c \
 	dshow_adec.c \
 	dmo_vdec.c \
+	dmo_venc.c \
 	dmo_adec.c \
 	qt_adec.c
 
