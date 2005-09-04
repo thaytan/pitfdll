@@ -33,6 +33,7 @@ extern gboolean dshow_adec_register (GstPlugin * plugin);
 extern gboolean dmo_vdec_register (GstPlugin * plugin);
 extern gboolean dmo_venc_register (GstPlugin * plugin);
 extern gboolean dmo_adec_register (GstPlugin * plugin);
+extern gboolean dmo_aenc_register (GstPlugin * plugin);
 
 extern gboolean qt_adec_register (GstPlugin * plugin);
 

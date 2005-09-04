@@ -9,11 +9,67 @@
 
 typedef long STDCALL (*GETCLASS) (const GUID *, const GUID *, void **);
 
+void print_wave_header(WAVEFORMATEX *h){
+  printf("======= WAVE Format =======\n");
+  printf("Format Tag: %d (0x%X)\n",h->wFormatTag,h->wFormatTag);
+  printf("Channels: %d\n",h->nChannels);
+  printf("Samplerate: %ld\n",h->nSamplesPerSec);
+  printf("avg byte/sec: %ld\n",h->nAvgBytesPerSec);
+  printf("Block align: %d\n",h->nBlockAlign);
+  printf("bits/sample: %d\n",h->wBitsPerSample);
+  printf("cbSize: %d\n",h->cbSize);
+  if (h->cbSize > 0)
+  {
+    int i;
+    uint8_t* p = ((uint8_t*)h) + sizeof(WAVEFORMATEX);
+    printf("Unknown extra header dump: ");
+    for (i = 0; i < h->cbSize; i++)
+	    printf("[%x] ", p[i]);
+    printf("\n");
+  }
+  printf("===========================\n");
+}
+
+void print_video_header(VIDEOINFOHEADER *h){
+  printf("======= VIDEO Format ======\n");
+  printf("  rcSource: %d,%d x %d,%d\n", h->rcSource.left, h->rcSource.top,
+         h->rcSource.right, h->rcSource.bottom);
+  printf("  rcTarget: %d,%d x %d,%d\n", h->rcTarget.left, h->rcTarget.top,
+         h->rcTarget.right, h->rcTarget.bottom);
+  printf("  dwBitRate: %d\n", h->dwBitRate);
+  printf("  dwBitErrorRate: %d\n", h->dwBitErrorRate);
+  printf("  AvgTimePerFrame: %llu\n", h->AvgTimePerFrame);
+	printf("  biSize: %d\n", h->bmiHeader.biSize);
+	printf("  biWidth: %d\n", h->bmiHeader.biWidth);
+	printf("  biHeight: %d\n", h->bmiHeader.biHeight);
+	printf("  biPlanes: %d\n", h->bmiHeader.biPlanes);
+	printf("  biBitCount: %d\n", h->bmiHeader.biBitCount);
+	printf("  biCompression: %d='%.4s'\n", h->bmiHeader.biCompression,
+         (char *)&h->bmiHeader.biCompression);
+	printf("  biSizeImage: %d\n", h->bmiHeader.biSizeImage);
+  printf("  biXPelsPerMeter: %ld\n", h->bmiHeader.biXPelsPerMeter);
+  printf("  biYPelsPerMeter: %ld\n", h->bmiHeader.biYPelsPerMeter);
+  printf("  biClrUsed: %d\n", h->bmiHeader.biClrUsed);
+  printf("  biClrImportant: %d\n", h->bmiHeader.biClrImportant);
+  if (h->bmiHeader.biSize > sizeof(BITMAPINFOHEADER))
+  {
+    int i;
+    uint8_t* p = ((uint8_t*)&h->bmiHeader) + sizeof(BITMAPINFOHEADER);
+    printf("Unknown extra header dump: ");
+    for (i = 0; i < h->bmiHeader.biSize-sizeof(BITMAPINFOHEADER); i++)
+	    printf("[%x] ", *(p+i));
+    printf("\n");
+  }
+  printf("===========================\n");
+}
+
 void DMO_Filter_Destroy (DMO_Filter * This)
 {
   if (!This)
     return;
   
+  if (This->m_pPrivateData)
+    This->m_pPrivateData->vt->Release ((IUnknown *) This->m_pPrivateData);
   if (This->m_pOptim)
     This->m_pOptim->vt->Release ((IUnknown *) This->m_pOptim);
   if (This->m_pInPlace)
@@ -23,6 +79,98 @@ void DMO_Filter_Destroy (DMO_Filter * This)
 
   free (This);
   CodecRelease ();
+}
+
+int DMO_Filter_LookupAudioEncoderType (DMO_Filter * This, WAVEFORMATEX * target,
+                                       WAVEFORMATEX ** type,
+                                       char ** error_message)
+{
+  HRESULT hr = 0;
+  char * local_error = NULL;
+  DMO_MEDIA_TYPE mt;
+  DMO_MEDIA_TYPE ** types = NULL;
+  unsigned long nbTypes = 0, dwType = 0, index = 0;
+  long best_index = -1, min_bitrate_gap = -1;
+  
+  if (!This || !This->m_pMedia || !This->m_pMedia->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p", This);
+    goto beach;
+  }
+  
+  /* First hit to the list */
+  hr = This->m_pMedia->vt->GetOutputType (This->m_pMedia, 0, dwType, &mt);
+  
+  /* If you don't know what you want... Take that ! */
+  if (!target) {
+    WAVEFORMATEX * format = (WAVEFORMATEX *) mt.pbFormat;
+    *type = (WAVEFORMATEX *) calloc (1, sizeof (WAVEFORMATEX) + format->cbSize);
+    memcpy (*type, format, sizeof (WAVEFORMATEX) + format->cbSize);
+    goto beach;
+  }
+  
+  /* Loop until there's no more types */
+  while (hr == S_OK) {
+    WAVEFORMATEX * format = (WAVEFORMATEX *) mt.pbFormat;
+    
+    /* We match any fixed parameters like format, bitrate, channels, depth */
+    if (format && format->wFormatTag == target->wFormatTag &&
+        format->nSamplesPerSec == target->nSamplesPerSec &&
+        format->wBitsPerSample == target->wBitsPerSample &&
+        format->nChannels == target->nChannels) {
+      long bitrate_gap = 0;
+      long type_size = sizeof (DMO_MEDIA_TYPE) + sizeof (WAVEFORMATEX) + format->cbSize;
+      nbTypes++;
+      types = realloc (types, sizeof (DMO_MEDIA_TYPE *) * nbTypes);
+      types[nbTypes - 1] = (DMO_MEDIA_TYPE *) calloc (1, type_size);
+      memcpy ((char *) types[nbTypes - 1], &mt, type_size);
+      print_wave_header ((WAVEFORMATEX *) types[nbTypes - 1]->pbFormat);
+      /* We try to identify the format with the closest birate */
+      bitrate_gap = abs (format->nAvgBytesPerSec - target->nAvgBytesPerSec);
+      if (bitrate_gap <= min_bitrate_gap || min_bitrate_gap == -1) {
+        min_bitrate_gap = bitrate_gap;
+        best_index = index;
+      }
+      index++;
+    }
+    
+    dwType++;
+    
+    /* Trying to free the allocated structure. Not really sure we do that 
+       correctly. FIXME 
+    if (mt.pbFormat)
+      free (mt.pbFormat);
+    memset (&mt, 0, sizeof (DMO_MEDIA_TYPE) + sizeof (WAVEFORMATEX) + format->cbSize);*/
+   
+    hr = This->m_pMedia->vt->GetOutputType (This->m_pMedia, 0, dwType, &mt);
+  }
+    
+  if (!nbTypes) {
+    asprintf (&local_error, "found no type matching with the target format");
+    goto beach;
+  }
+  
+  if (type && best_index >= 0) {
+    WAVEFORMATEX * format = (WAVEFORMATEX *) types[best_index]->pbFormat;
+    *type = (WAVEFORMATEX *) calloc (1, sizeof (WAVEFORMATEX) + format->cbSize);
+    memcpy (*type, format, sizeof (WAVEFORMATEX) + format->cbSize);
+  }
+  else {
+    asprintf (&local_error, "no matching type was found or you were not expecting any return");
+    *type = NULL;
+  }
+  
+  for (index = 0; index < nbTypes; index++) {
+    free (types[index]);
+  }
+  
+  free (types);
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE;
 }
 
 int DMO_Filter_InspectPins (DMO_Filter * This, char ** error_message)
@@ -66,10 +214,11 @@ int DMO_Filter_InspectPins (DMO_Filter * This, char ** error_message)
     hr = This->m_pMedia->vt->GetOutputType (This->m_pMedia, index, dwType, &mt);
     while (hr == S_OK) {
       printf ("Mediatype { %lx, %lx, %lx, %lx } Subtype { %lx, %lx, %lx, %lx }"\
-              " format struct length %ld (normal size would be %ld)\n",
+              " format type { %lx, %lx, %lx, %lx }\n",
               mt.majortype.f1, mt.majortype.f2, mt.majortype.f3,
               mt.majortype.f4, mt.subtype.f1, mt.subtype.f2, mt.subtype.f3,
-              mt.subtype.f4, mt.cbFormat, sizeof (VIDEOINFOHEADER));
+              mt.subtype.f4, mt.formattype.f1, mt.formattype.f2, 
+              mt.formattype.f3, mt.formattype.f4);
       dwType++;
       hr = This->m_pMedia->vt->GetOutputType (This->m_pMedia, index, dwType, &mt);
     }
@@ -85,15 +234,11 @@ beach:
 }
 
 /* Sets a format on a specific input pin. If the format is NULL we are trying
-   to clear the format on that pin. If we have been able to set the format,
-   we will query the pin for informations on expected buffers and fill the 
-   reference passed variables with those infos. An error message will be set
+   to clear the format on that pin. An error message will be set
    indicating what happened except if error_message is NULL */
 int DMO_Filter_SetInputType (DMO_Filter * This, unsigned long pin_id,
                              DMO_MEDIA_TYPE * in_fmt,
-                             unsigned long * buffer_size,
-                             unsigned long * lookahead,
-                             unsigned long * align, char ** error_message)
+                             char ** error_message)
 {
   HRESULT hr = 0;
   char * local_error = NULL;
@@ -134,24 +279,46 @@ int DMO_Filter_SetInputType (DMO_Filter * This, unsigned long pin_id,
         goto beach;
       }
     }
-    if (buffer_size && lookahead && align) { /* Getting buffer infos */
-      hr = This->m_pMedia->vt->GetInputSizeInfo (This->m_pMedia, pin_id,
-                                                 buffer_size, lookahead, align);
-      if (hr != S_OK) {
-        if (hr == DMO_E_INVALIDSTREAMINDEX) {
-          asprintf (&local_error, "pin %ld is not a valid input pin", pin_id);
-          goto beach;
-        }
-        else if (hr == DMO_E_TYPE_NOT_SET) {
-          asprintf (&local_error, "type not set on input pin %ld, can't get " \
-                    "buffer infos", pin_id);
-          goto beach;
-        }
-        else {
-          asprintf (&local_error, "unexpected error when trying to get infos " \
-                    "on input pin %ld : 0x%lx", pin_id, hr);
-          goto beach;
-        }
+  }
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE;
+}
+
+int DMO_Filter_GetInputSizeInfo (DMO_Filter * This, unsigned long pin_id,
+                                 unsigned long * buffer_size,
+                                 unsigned long * lookahead,
+                                 unsigned long * align, char ** error_message)
+{
+  HRESULT hr = 0;
+  char * local_error = NULL;
+      
+  if (!This || !This->m_pMedia || !This->m_pMedia->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p", This);
+    goto beach;
+  }
+  
+  if (buffer_size && lookahead && align) { /* Getting buffer infos */
+    hr = This->m_pMedia->vt->GetInputSizeInfo (This->m_pMedia, pin_id,
+                                               buffer_size, lookahead, align);
+    if (hr != S_OK) {
+      if (hr == DMO_E_INVALIDSTREAMINDEX) {
+        asprintf (&local_error, "pin %ld is not a valid input pin", pin_id);
+        goto beach;
+      }
+      else if (hr == DMO_E_TYPE_NOT_SET) {
+        asprintf (&local_error, "type not set on input pin %ld, can't get " \
+                  "buffer infos", pin_id);
+        goto beach;
+      }
+      else {
+        asprintf (&local_error, "unexpected error when trying to get infos " \
+                  "on input pin %ld : 0x%lx", pin_id, hr);
+        goto beach;
       }
     }
   }
@@ -165,14 +332,11 @@ beach:
 }
 
 /* Sets a format on a specific output pin. If the format is NULL we are trying
-   to clear the format on that pin. If we have been able to set the format,
-   we will query the pin for informations on expected buffers and fill the 
-   reference passed variables with those infos. An error message will be set
+   to clear the format on that pin. An error message will be set
    indicating what happened except if error_message is NULL */
 int DMO_Filter_SetOutputType (DMO_Filter * This, unsigned long pin_id,
                               DMO_MEDIA_TYPE * out_fmt,
-                              unsigned long * buffer_size,
-                              unsigned long * align, char ** error_message)
+                              char ** error_message)
 {
   HRESULT hr = 0;
   char * local_error = NULL;
@@ -213,24 +377,45 @@ int DMO_Filter_SetOutputType (DMO_Filter * This, unsigned long pin_id,
         goto beach;
       }
     }
-    if (buffer_size && align) { /* Getting buffer infos */
-      hr = This->m_pMedia->vt->GetOutputSizeInfo (This->m_pMedia, pin_id,
-                                                  buffer_size, align);
-      if (hr != S_OK) {
-        if (hr == DMO_E_INVALIDSTREAMINDEX) {
-          asprintf (&local_error, "pin %ld is not a valid output pin", pin_id);
-          goto beach;
-        }
-        else if (hr == DMO_E_TYPE_NOT_SET) {
-          asprintf (&local_error, "type not set on output pin %ld, can't get " \
-                    "buffer infos", pin_id);
-          goto beach;
-        }
-        else {
-          asprintf (&local_error, "unexpected error when trying to get infos " \
-                    "on output pin %ld : 0x%lx", pin_id, hr);
-          goto beach;
-        }
+  }
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE;
+}
+
+int DMO_Filter_GetOutputSizeInfo (DMO_Filter * This, unsigned long pin_id,
+                                  unsigned long * buffer_size,
+                                  unsigned long * align, char ** error_message)
+{
+  HRESULT hr = 0;
+  char * local_error = NULL;
+      
+  if (!This || !This->m_pMedia || !This->m_pMedia->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p", This);
+    goto beach;
+  }
+  
+  if (buffer_size && align) { /* Getting buffer infos */
+    hr = This->m_pMedia->vt->GetOutputSizeInfo (This->m_pMedia, pin_id,
+                                                buffer_size, align);
+    if (hr != S_OK) {
+      if (hr == DMO_E_INVALIDSTREAMINDEX) {
+        asprintf (&local_error, "pin %ld is not a valid output pin", pin_id);
+        goto beach;
+      }
+      else if (hr == DMO_E_TYPE_NOT_SET) {
+        asprintf (&local_error, "type not set on output pin %ld, can't get " \
+                  "buffer infos", pin_id);
+        goto beach;
+      }
+      else {
+        asprintf (&local_error, "unexpected error when trying to get infos " \
+                  "on output pin %ld : 0x%lx", pin_id, hr);
+        goto beach;
       }
     }
   }
@@ -241,6 +426,86 @@ beach:
     return FALSE;
   }
   return TRUE;
+}
+
+int DMO_Filter_SetPartialOutputType (DMO_Filter * This,
+                                     unsigned long * data_length,
+                                     char ** data,
+                                     DMO_MEDIA_TYPE * out_fmt,
+                                     char ** error_message)
+{
+  HRESULT hr = 0;
+  char * local_error = NULL;
+      
+  if (!This || !This->m_pPrivateData || !This->m_pPrivateData->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p or this " \
+              "DMO does not support the IWMCodecPrivateData interface", This);
+    goto beach;
+  }
+  
+  hr = This->m_pPrivateData->vt->SetPartialOutputType (This->m_pPrivateData,
+                                                       out_fmt);
+  
+  if (hr != S_OK) {
+    asprintf (&local_error, "unexpected error when trying to set partial " \
+              "output type: 0x%lx", hr);
+    goto beach;
+  }
+  
+  hr = This->m_pPrivateData->vt->GetPrivateData (This->m_pPrivateData, NULL,
+                                                 data_length);
+  if (hr != S_OK) {
+    asprintf (&local_error, "unexpected error when trying to get private " \
+              "data length: 0x%lx", hr);
+    goto beach;
+  }
+  
+  if (*data_length == 0)
+    goto beach;
+  else
+    printf ("data length is %d\n", *data_length);
+  
+  *data = malloc (*data_length);
+  
+  hr = This->m_pPrivateData->vt->GetPrivateData (This->m_pPrivateData,
+                                                 *data,
+                                                 data_length);
+  if (hr != S_OK) {
+    asprintf (&local_error, "unexpected error when trying to get private " \
+              "data: 0x%lx", hr);
+    goto beach;
+  }
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE; 
+}
+
+int DMO_Filter_Discontinuity (DMO_Filter * This, char ** error_message)
+{
+  HRESULT hr = 0;
+  char * local_error = NULL;
+      
+  if (!This || !This->m_pMedia || !This->m_pMedia->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p", This);
+    goto beach;
+  }
+  
+  hr = This->m_pMedia->vt->Discontinuity (This->m_pMedia, 0);
+  if (hr != S_OK) {
+    asprintf (&local_error, "error when sending discontinuity: 0x%lx", hr);
+    goto beach;
+  }
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE;   
 }
 
 DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID* id,
@@ -296,11 +561,9 @@ DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID* id,
     /* query for some extra available interface */
     HRESULT r = object->vt->QueryInterface (object, &IID_IMediaObjectInPlace,
                                             (void **) &This->m_pInPlace);
-    if (r == 0 && This->m_pInPlace)
-      printf("DMO dll supports InPlace - PLEASE REPORT to developer\n");
     
     r = object->vt->QueryInterface (object, &IID_IDMOVideoOutputOptimizations,
-                                    (void**)&This->m_pOptim);
+                                    (void**) &This->m_pOptim);
     if (r == 0 && This->m_pOptim) {
       unsigned long flags;
       r = This->m_pOptim->vt->QueryOperationModePreferences (This->m_pOptim, 0,
@@ -309,6 +572,9 @@ DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID* id,
       if (flags & DMO_VOSF_NEEDS_PREVIOUS_SAMPLE)
         printf("DMO dll might use previous sample when requested\n");
     }
+    
+    r = object->vt->QueryInterface (object, &IID_IWMCodecPrivateData,
+                                    (void **) &This->m_pPrivateData);
   }
   
   object->vt->Release ((IUnknown *) object);

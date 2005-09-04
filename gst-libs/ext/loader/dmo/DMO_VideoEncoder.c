@@ -96,11 +96,28 @@ int DMO_VideoEncoder_GetOutputInfos (DMO_VideoEncoder * this,
   return TRUE;
 }
 
+int DMO_VideoEncoder_GetInputInfos (DMO_VideoEncoder * this, 
+                                    unsigned long * in_buffer_size,
+                                    unsigned long * in_align,
+                                    unsigned long * lookahead)
+{
+  if (!this || !in_buffer_size || !in_align || !lookahead)
+    return FALSE;
+  
+  *in_buffer_size = this->in_buffer_size;
+  *in_align = this->in_align;
+  *lookahead = this->lookahead;
+  
+  return TRUE;
+}
+
 DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
                                           BITMAPINFOHEADER * format,
                                           unsigned int dest_fourcc,
                                           unsigned long bitrate,
-                                          float framerate)
+                                          float framerate,
+                                          char ** data,
+                                          unsigned long * data_length)
 {
   DMO_VideoEncoder * this;
   HRESULT result;
@@ -126,11 +143,10 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   this->m_sVhdr->bmiHeader.biPlanes = 1;
   this->m_sVhdr->bmiHeader.biBitCount = format->biBitCount;
   this->m_sVhdr->bmiHeader.biCompression = format->biCompression;
-  this->m_sVhdr->bmiHeader.biSizeImage = labs (format->biWidth * format->biHeight
-                                               * ((format->biBitCount + 7) / 8));
+  this->m_sVhdr->bmiHeader.biSizeImage = format->biWidth * format->biHeight * format->biBitCount / 8;
 
   this->m_sVhdr->dwBitRate = framerate * this->m_sVhdr->bmiHeader.biSizeImage * 8;
-  this->m_sVhdr->AvgTimePerFrame = 10000 / framerate;
+  this->m_sVhdr->AvgTimePerFrame = 10000000 / framerate;
   this->m_sVhdr->rcSource.left = this->m_sVhdr->rcSource.top = 0;
   this->m_sVhdr->rcSource.right = this->m_sVhdr->bmiHeader.biWidth;
   this->m_sVhdr->rcSource.bottom = this->m_sVhdr->bmiHeader.biHeight;
@@ -148,7 +164,6 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
     for (c = check; c->bits; c++) {
       if (c->fcc == format->biBitCount) {
         this->m_sOurType.subtype = *c->subtype;
-        printf ("using %s\n", c->name);
       }
     }
   }
@@ -158,7 +173,6 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
         this->m_sOurType.subtype = *c->subtype;
         /* We trust our table more than the input format */
         this->m_sVhdr->bmiHeader.biBitCount = c->bits;
-        printf ("using %s\n", c->name);
       }
     }
   }
@@ -168,6 +182,7 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   this->m_sOurType.formattype = FORMAT_VideoInfo;
   this->m_sOurType.cbFormat = sizeof (VIDEOINFOHEADER);
   this->m_sOurType.pbFormat = (char*) this->m_sVhdr;
+  this->m_sOurType.pUnk = NULL;
   
   /* Defining outgoing type compressed video bitstream */
   this->m_sVhdr2 = (VIDEOINFOHEADER *) malloc (sizeof (VIDEOINFOHEADER));
@@ -178,14 +193,14 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   this->m_sVhdr2->bmiHeader.biHeight = format->biHeight;
   this->m_sVhdr2->bmiHeader.biPlanes = 1;
   this->m_sVhdr2->bmiHeader.biCompression = dest_fourcc;
-
+  this->m_sVhdr2->bmiHeader.biBitCount = format->biBitCount;
+  this->m_sVhdr2->bmiHeader.biSizeImage = format->biWidth * format->biHeight * format->biBitCount / 8;
+  
+  this->m_sVhdr2->rcSource = this->m_sVhdr->rcSource;
+  this->m_sVhdr2->rcTarget = this->m_sVhdr->rcTarget;
   this->m_sVhdr2->dwBitRate = bitrate;
   this->m_sVhdr2->dwBitErrorRate = 0;
-  this->m_sVhdr2->AvgTimePerFrame = 10000 / framerate;
-  this->m_sVhdr2->rcSource.left = this->m_sVhdr2->rcSource.top = 0;
-  this->m_sVhdr2->rcSource.right = format->biWidth;
-  this->m_sVhdr2->rcSource.bottom = format->biHeight;
-  this->m_sVhdr2->rcTarget = this->m_sVhdr2->rcSource;
+  this->m_sVhdr2->AvgTimePerFrame = 10000000 / framerate;
   
   memset (&this->m_sDestType, 0, sizeof (this->m_sDestType));
   
@@ -197,6 +212,9 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   this->m_sDestType.bTemporalCompression = true;
   this->m_sDestType.cbFormat = sizeof (VIDEOINFOHEADER);
   this->m_sDestType.pbFormat = (char *) this->m_sVhdr2;
+  this->m_sDestType.pUnk = NULL;
+  
+  print_video_header (this->m_sVhdr);
  
   /* Creating DMO Filter */
   this->m_pDMO_Filter = DMO_Filter_Create (dllname, guid, &this->inputs,
@@ -204,16 +222,47 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   if (!this->m_pDMO_Filter)
     goto beach;
   
-  /* Output first and then input as we are an encoder */
+  /* Input first and then output as we are an encoder */
   if (!DMO_Filter_SetInputType (this->m_pDMO_Filter, 0, &this->m_sOurType,
-                                &this->in_buffer_size, &this->lookahead,
-                                &this->in_align, &error_message))
+                                &error_message))
     goto beach;
+  
+  /* Try a set partial output */
+  if (!DMO_Filter_SetPartialOutputType (this->m_pDMO_Filter, data_length,
+                                        data, &this->m_sDestType,
+                                        &error_message))
+    goto beach;
+  
+  /* Add additional data to our structure */
+  if (*data_length) {
+    this->m_sDestType.cbFormat = sizeof (VIDEOINFOHEADER) + *data_length;
+    this->m_sVhdr2->bmiHeader.biSize += *data_length;
+    this->m_sVhdr2 = (VIDEOINFOHEADER *) realloc (this->m_sVhdr2,
+                                                  this->m_sDestType.cbFormat);
+    memcpy ((char *) this->m_sVhdr2 + sizeof (VIDEOINFOHEADER), *data,
+            *data_length);
+  }
+  
+  print_video_header (this->m_sVhdr2);
+  
+  /* Now use that data in dest type and set the output type definitely */
   if (!DMO_Filter_SetOutputType (this->m_pDMO_Filter, 0, &this->m_sDestType,
-                                 &this->out_buffer_size, &this->out_align,
                                  &error_message))
     goto beach;
   
+  /* Getting informations about buffers */
+  if (!DMO_Filter_GetOutputSizeInfo (this->m_pDMO_Filter, 0,
+                                     &this->out_buffer_size, &this->out_align,
+                                     &error_message))
+    goto beach;
+  
+  if (!DMO_Filter_GetInputSizeInfo (this->m_pDMO_Filter, 0,
+                                    &this->in_buffer_size, &this->lookahead,
+                                    &this->in_align, &error_message))
+    goto beach;
+  
+  if (!DMO_Filter_Discontinuity (this->m_pDMO_Filter, &error_message))
+    goto beach;
   
   return this;
   
@@ -249,36 +298,79 @@ void DMO_VideoEncoder_Destroy (DMO_VideoEncoder * this)
   }
 }
 
-int DMO_VideoEncoder_EncodeInternal (DMO_VideoEncoder * this,
-                                     const void * in_data,
-                                     unsigned long in_size,
-                                     void * out_data,
-                                     unsigned long out_size)
+int DMO_VideoEncoder_ProcessInput (DMO_VideoEncoder * this,
+                                   unsigned long long timestamp,
+                                   unsigned long long duration,
+                                   const void * in_data, unsigned int in_size,
+                                   unsigned int * size_read)
 {
-  unsigned long result, index, status;
-  DMO_OUTPUT_DATA_BUFFER * db = NULL;
-  CMediaBuffer * bufferin = NULL;
+  CMediaBuffer * bufferin;
+  unsigned long read = 0;
+  int r = 0;
+  
+  if (!in_data)
+	  return -1;
 
 #ifdef LDT_paranoia
-    Setup_FS_Segment();
+    Setup_FS_Segment ();
 #endif
 
-  bufferin = CMediaBufferCreate (in_size, (void *) in_data, in_size, 0);
-  result = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
-                this->m_pDMO_Filter->m_pMedia, 0,
-                (IMediaBuffer *) bufferin, 0, 0, 0);
-                
-  ((IMediaBuffer *) bufferin)->vt->Release ((IUnknown *) bufferin);
-
-  if (result != S_OK) {
-    /* something to process */
-	  if (result != S_FALSE)
-	    printf ("ProcessInputError  r:0x%x=%d\n", result, result);
-	  else
-	    printf ("ProcessInputError  FALSE ??\n");
-	  return in_size;
+  /* REFERENCETIME is in 100 nanoseconds */
+  timestamp /= 100;
+  duration /= 100;  
+  
+  /* Creating the IMediaBuffer containing input data */
+  bufferin = CMediaBufferCreate (in_size, (void *) in_data, in_size, 1);
+  
+  if (duration) {
+    r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
+        this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
+				DMO_INPUT_DATA_BUFFERF_TIME |
+        DMO_INPUT_DATA_BUFFERF_TIMELENGTH |
+        DMO_INPUT_DATA_BUFFERF_SYNCPOINT,
+        timestamp, duration);
+  }
+  else {
+    r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
+          this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
+				  DMO_INPUT_DATA_BUFFERF_SYNCPOINT, 0, 0);
   }
 
+ ((IMediaBuffer *) bufferin)->vt->GetBufferAndLength ((IMediaBuffer *) bufferin,
+                                                      0, &read);
+
+  ((IMediaBuffer *) bufferin)->vt->Release((IUnknown *) bufferin);
+
+  if (size_read)
+	  *size_read = read;
+  
+  if (r == S_OK || (unsigned) r == DMO_E_NOTACCEPTING) {
+    /* Output data waiting for us to process it, so we won't accept more. */
+    return FALSE;
+  }
+  else {
+    /* Send us more data please */
+    return TRUE;
+  }
+}
+
+int DMO_VideoEncoder_ProcessOutput (DMO_VideoEncoder * this,
+                                    void * out_data, unsigned int out_size,
+                                    unsigned int * size_written,
+                                    unsigned long long * timestamp,
+                                    unsigned long long * duration)
+{
+  DMO_OUTPUT_DATA_BUFFER * db = NULL;
+  unsigned long written = 0, status = 0, index;
+  int r = 0;
+  
+  if (!out_data)
+	  return -1;
+
+#ifdef LDT_paranoia
+    Setup_FS_Segment ();
+#endif
+  
   db = malloc (sizeof (DMO_OUTPUT_DATA_BUFFER) * this->outputs);
   if (!db)
     return 0;
@@ -289,26 +381,41 @@ int DMO_VideoEncoder_EncodeInternal (DMO_VideoEncoder * this,
     db[index].dwStatus = 0;
     if (index == 0)
       db[index].pBuffer = (IMediaBuffer *) CMediaBufferCreate (out_size,
-                                                               (void *) out_data,
-                                                                0, 0);
+                                                               out_data, 0, 0);
     else
       db[index].pBuffer = NULL;
   }
   
-  result = this->m_pDMO_Filter->m_pMedia->vt->ProcessOutput (
-             this->m_pDMO_Filter->m_pMedia,
-             DMO_PROCESS_OUTPUT_DISCARD_WHEN_NO_BUFFER,
-             this->outputs, db, &status);
+	r = this->m_pDMO_Filter->m_pMedia->vt->ProcessOutput (
+                                     this->m_pDMO_Filter->m_pMedia,
+                                     DMO_PROCESS_OUTPUT_DISCARD_WHEN_NO_BUFFER,
+                                     this->outputs, db, &status);
+    
+  /* printf ("dwStatus is %d r is %d 0x%X\n", db[0].dwStatus, r, r); */
 
-  if ((unsigned)result == DMO_E_NOTACCEPTING)
-	  printf("ProcessOutputError: Not accepting\n");
-  else if (result)
-  	printf("ProcessOutputError: r:0x%x=%d  %ld\n", result, result, status);
-
-  /* Only the first buffer was not null. The others were discardable */
-  ((IMediaBuffer *) db[0].pBuffer)->vt->Release ((IUnknown *) db[0].pBuffer);
+	((IMediaBuffer *) db[0].pBuffer)->vt->GetBufferAndLength (
+                                       (IMediaBuffer *) db[0].pBuffer, NULL,
+                                       &written);
+	((IMediaBuffer *) db[0].pBuffer)->vt->Release ((IUnknown *) db[0].pBuffer);
   
-  free (db);
-
-  return 0;
+  
+  if (size_written)
+	  *size_written = written;
+  
+  if (timestamp && duration &&
+      (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_TIME) &&
+      (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_TIMELENGTH)) {
+    *timestamp = db[0].rtTimestamp * 100;
+    *duration = db[0].rtTimelength * 100;
+  }
+  
+  if ((db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE) != 0) {
+    /* printf ("I have more data to output\n"); */
+    free (db);
+    return TRUE;
+  }
+  else {
+    free (db);
+    return FALSE;
+  }
 }

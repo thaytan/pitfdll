@@ -32,6 +32,45 @@ typedef struct _DMO_OUTPUT_DATA_BUFFER
 
 
 /*
+ * IPropertyBag interface
+
+typedef struct _IPropertyBag IPropertyBag;
+typedef struct IPropertyBag_vt
+{
+    INHERIT_IUNKNOWN();
+  
+    HRESULT STDCALL ( *Read )(IPropertyBag * This,
+           [in]  LPCOLESTR pszPropName,
+           [out][in]  VARIANT *pVar,
+           [in] IErrorLog *pErrorLog);
+        
+    HRESULT STDCALL ( *Write )(IPropertyBag * This,
+           [in]  LPCOLESTR pszPropName,
+           [in]  VARIANT *pVar);
+} IPropertyBag_vt;
+struct _IPropertyBag { IPropertyBag_vt* vt; }; */
+
+
+/*
+ * IWMCodecPrivateData interface
+ */
+ 
+typedef struct _IWMCodecPrivateData IWMCodecPrivateData;
+typedef struct IWMCodecPrivateData_vt
+{
+    INHERIT_IUNKNOWN();
+  
+    HRESULT STDCALL ( *SetPartialOutputType )(IWMCodecPrivateData * This,
+          /* [in] */ DMO_MEDIA_TYPE *pmt);
+    HRESULT STDCALL ( *GetPrivateData )(IWMCodecPrivateData * This,
+          /* [out] */ char *pbData,
+          /* [in] [out] */ unsigned long *pcbData);
+  
+} IWMCodecPrivateData_vt;
+struct _IWMCodecPrivateData { IWMCodecPrivateData_vt* vt; };
+
+
+/*
  * IMediaObject interface
  */
 typedef struct _IMediaObject IMediaObject;

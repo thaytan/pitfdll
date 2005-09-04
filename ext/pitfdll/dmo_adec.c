@@ -34,15 +34,21 @@ typedef struct _DMOAudioDec {
 
   GstPad *srcpad, *sinkpad;
 
+  GstBuffer *out_buffer;
+  
   /* settings */
   gint bitrate;
   gint channels;
   gint rate;
   gint block_align;
-    
+  gint depth;
+  
   void *ctx;
   gulong out_buffer_size;
+  gulong in_buffer_size;
+  gulong lookahead;
   gulong out_align;
+  gulong in_align;
   ldt_fs_t *ldt_fs;
 } DMOAudioDec;
 
@@ -93,9 +99,11 @@ dmo_audiodec_base_init (DMOAudioDecClass * klass)
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
 
   /* source, simple */
-  srccaps = gst_caps_from_string ("audio/x-raw-int, width = (int) 16," \
-                                  " depth = (int) 16, signed = (boolean) true" \
-                                  ", endianness = (int) 1234");
+  srccaps = gst_caps_from_string ("audio/x-raw-int, " \
+                                  "width = (int) { 1, 8, 16, 24, 32 }, " \
+                                  "depth = (int) { 1, 8, 16, 24, 32 }, " \
+                                  "signed = (boolean) true, " \
+                                  "endianness = (int) 1234");
   src = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, srccaps);
 
   /* register */
@@ -134,6 +142,7 @@ dmo_audiodec_init (DMOAudioDec * dec)
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
 
   dec->ctx = NULL;
+  dec->out_buffer = NULL;
 }
 
 static void
@@ -170,7 +179,8 @@ dmo_audiodec_link (GstPad * pad, const GstCaps * caps)
   if (!gst_structure_get_int (s, "bitrate", &dec->bitrate) ||
       !gst_structure_get_int (s, "block_align", &dec->block_align) ||
       !gst_structure_get_int (s, "rate", &dec->rate) ||
-      !gst_structure_get_int (s, "channels", &dec->channels))
+      !gst_structure_get_int (s, "channels", &dec->channels) ||
+      !gst_structure_get_int (s, "depth", &dec->depth))
     return GST_PAD_LINK_REFUSED;
   if ((v = gst_structure_get_value (s, "codec_data")))
     extradata = g_value_get_boxed (v);
@@ -190,7 +200,7 @@ dmo_audiodec_link (GstPad * pad, const GstCaps * caps)
   hdr->nSamplesPerSec = dec->rate;
   hdr->nAvgBytesPerSec = dec->bitrate / 8;
   hdr->nBlockAlign = dec->block_align;
-  hdr->wBitsPerSample = 16;
+  hdr->wBitsPerSample = dec->depth;
   GST_DEBUG ("Will now open %s using %d bps %d channels", dll, dec->bitrate,
              dec->channels);
   if (!(dec->ctx = DMO_AudioDecoder_Open (dll, &klass->entry->guid, hdr))) {
@@ -204,11 +214,13 @@ dmo_audiodec_link (GstPad * pad, const GstCaps * caps)
   
   DMO_AudioDecoder_GetOutputInfos (dec->ctx, &dec->out_buffer_size,
                                    &dec->out_align);
-
+  DMO_AudioDecoder_GetInputInfos (dec->ctx, &dec->in_buffer_size,
+                                  &dec->in_align, &dec->lookahead);
+  
   /* negotiate output */
   out = gst_caps_new_simple ("audio/x-raw-int",
-      "width", G_TYPE_INT, 16,
-      "depth", G_TYPE_INT, 16,
+      "width", G_TYPE_INT, dec->depth,
+      "depth", G_TYPE_INT, dec->depth,
       "signed", G_TYPE_BOOLEAN, TRUE,
       "rate", G_TYPE_INT, dec->rate,
       "endianness", G_TYPE_INT, 1234,
@@ -244,27 +256,65 @@ static void
 dmo_audiodec_chain (GstPad * pad, GstData * data)
 {
   DMOAudioDec *dec = (DMOAudioDec *) gst_pad_get_parent (pad);
-  GstBuffer *in = NULL;
-  guint partial_read = 0, read = 0, wrote = 0;
+  GstBuffer *in_buffer = NULL;
+  guint read = 0, wrote = 0, status = FALSE;
 
   Check_FS_Segment ();
 
-  /* decode */
-  in = GST_BUFFER (data);
-  while (read < GST_BUFFER_SIZE (in)) {
-    GstBuffer * out = NULL;
-    out = gst_buffer_new_and_alloc (dec->out_buffer_size);
-    GST_BUFFER_TIMESTAMP (out) = GST_BUFFER_TIMESTAMP (in);
-    GST_BUFFER_DURATION (out) = GST_BUFFER_DURATION (in);
-    DMO_AudioDecoder_Convert (dec->ctx, GST_BUFFER_DATA (in),
-                              GST_BUFFER_SIZE (in),  GST_BUFFER_DATA (out),
-                              GST_BUFFER_SIZE (out), &partial_read, &wrote);
-    GST_BUFFER_SIZE (out) = wrote;
-    gst_pad_push (dec->srcpad, GST_DATA (out));
-    read += partial_read;
-  }
+  in_buffer = GST_BUFFER (data);
   
-  gst_data_unref (data);
+  /* encode */
+  status = DMO_AudioDecoder_ProcessInput (dec->ctx,
+                                          GST_BUFFER_TIMESTAMP (in_buffer),
+                                          GST_BUFFER_DURATION (in_buffer),
+                                          GST_BUFFER_DATA (in_buffer),
+                                          GST_BUFFER_SIZE (in_buffer),
+                                          &read);
+  
+  GST_DEBUG ("read %d out of %d, time %llu duration %llu", read,
+             GST_BUFFER_SIZE (in_buffer),
+             GST_BUFFER_TIMESTAMP (in_buffer),
+             GST_BUFFER_DURATION (in_buffer));
+  
+  if (!dec->out_buffer) {
+    dec->out_buffer = gst_buffer_new_and_alloc (dec->out_buffer_size);
+    /* If the DMO can not set the timestamp we do our best guess */
+    GST_BUFFER_TIMESTAMP (dec->out_buffer) = GST_BUFFER_TIMESTAMP (in_buffer);
+  }
+
+  /* If the DMO can not set the duration we do our best guess */
+  GST_BUFFER_DURATION (dec->out_buffer) += GST_BUFFER_DURATION (in_buffer);
+  
+  gst_buffer_unref (in_buffer);
+  in_buffer = NULL;
+  
+  if (status == FALSE) {
+    GstClockTime timestamp = GST_BUFFER_TIMESTAMP (dec->out_buffer);
+    GST_DEBUG ("we have some output buffers to collect (size is %d)",
+               GST_BUFFER_SIZE (dec->out_buffer));
+    /* Loop until the last buffer (returns FALSE) */
+    while ((status = DMO_AudioDecoder_ProcessOutput (dec->ctx,
+                           GST_BUFFER_DATA (dec->out_buffer),
+                           GST_BUFFER_SIZE (dec->out_buffer),
+                           &wrote,
+                           &(GST_BUFFER_TIMESTAMP (dec->out_buffer)),
+                           &(GST_BUFFER_DURATION (dec->out_buffer)))) == TRUE) {
+      GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
+                 wrote, GST_BUFFER_TIMESTAMP (dec->out_buffer), GST_BUFFER_DURATION (dec->out_buffer));
+      GST_BUFFER_SIZE (dec->out_buffer) = wrote;
+      gst_pad_push (dec->srcpad, GST_DATA (dec->out_buffer));
+      dec->out_buffer = gst_buffer_new_and_alloc (dec->out_buffer_size);
+      /* If the DMO can not set the timestamp we do our best guess */
+      GST_BUFFER_TIMESTAMP (dec->out_buffer) = timestamp;
+      GST_BUFFER_DURATION (dec->out_buffer) = 0;
+    }
+    GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
+               GST_BUFFER_TIMESTAMP (dec->out_buffer),
+               GST_BUFFER_DURATION (dec->out_buffer));
+    GST_BUFFER_SIZE (dec->out_buffer) = wrote;
+    gst_pad_push (dec->srcpad, GST_DATA (dec->out_buffer));
+    dec->out_buffer = NULL;
+  }
 }
 
 static GstElementStateReturn
@@ -282,7 +332,7 @@ dmo_audiodec_change_state (GstElement * element)
     case GST_STATE_PAUSED_TO_READY:
       if (dec->ctx) {
         Check_FS_Segment ();
-        DMO_VideoDecoder_Destroy (dec->ctx);
+        DMO_AudioDecoder_Destroy (dec->ctx);
         dec->ctx = NULL;
       }
       break;

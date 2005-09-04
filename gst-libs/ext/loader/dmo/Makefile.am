@@ -2,6 +2,7 @@ noinst_LTLIBRARIES = libdmo.la
 
 libdmo_la_SOURCES = \
 	DMO_AudioDecoder.c \
+	DMO_AudioEncoder.c \
 	DMO_VideoDecoder.c \
 	DMO_VideoEncoder.c \
 	buffer.c \
@@ -10,6 +11,7 @@ libdmo_la_SOURCES = \
 
 noinst_HEADERS = \
 	DMO_AudioDecoder.h \
+	DMO_AudioEncoder.h \
 	DMO_VideoDecoder.h \
 	DMO_VideoEncoder.h \
 	DMO_Filter.h \

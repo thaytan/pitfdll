@@ -8,7 +8,25 @@ DMO_VideoDecoder * DMO_VideoDecoder_Open (char * dllname, GUID * guid,
 
 void DMO_VideoDecoder_Destroy (DMO_VideoDecoder * this);
 
-int DMO_VideoDecoder_DecodeInternal (DMO_VideoDecoder * this, const void * src,
-                                     int size, int is_keyframe, char * pImage);
+int DMO_VideoDecoder_GetOutputInfos (DMO_VideoDecoder * this, 
+                                     unsigned long * out_buffer_size,
+                                     unsigned long * out_align);
+
+int DMO_VideoDecoder_GetInputInfos (DMO_VideoDecoder * this, 
+                                    unsigned long * in_buffer_size,
+                                    unsigned long * in_align,
+                                    unsigned long * lookahead);
+
+int DMO_VideoDecoder_ProcessInput (DMO_VideoDecoder * this,
+                                   unsigned long long timestamp,
+                                   unsigned long long duration,
+                                   const void * in_data, unsigned int in_size,
+                                   unsigned int * size_read);
+
+int DMO_VideoDecoder_ProcessOutput (DMO_VideoDecoder * this,
+                                    void * out_data, unsigned int out_size,
+                                    unsigned int * size_written,
+                                    unsigned long long * timestamp,
+                                    unsigned long long * duration);
 
 #endif /* AVIFILE_DMO_VIDEODECODER_H */

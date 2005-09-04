@@ -9,5 +9,7 @@ extern const GUID IID_IEnumDMO;
 extern const GUID IID_IMediaObjectInPlace;
 extern const GUID IID_IDMOQualityControl;
 extern const GUID IID_IDMOVideoOutputOptimizations;
+extern const GUID IID_IPropertyBag;
+extern const GUID IID_IWMCodecPrivateData;
 
 #endif

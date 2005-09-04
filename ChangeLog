@@ -1,3 +1,61 @@
+2005-09-04  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/Makefile.am:
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_base_init),
+	(dmo_audiodec_init), (dmo_audiodec_link), (dmo_audiodec_chain),
+	(dmo_audiodec_change_state):
+	* ext/pitfdll/dmo_aenc.c: (dmo_audioenc_base_init),
+	(dmo_audioenc_class_init), (dmo_audioenc_init),
+	(dmo_audioenc_get_property), (dmo_audioenc_set_property),
+	(dmo_audioenc_dispose), (dmo_audioenc_link), (dmo_audioenc_chain),
+	(dmo_audioenc_change_state), (dmo_aenc_register):
+	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_init), (dmo_videodec_link),
+	(dmo_videodec_chain):
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_base_init),
+	(dmo_videoenc_class_init), (dmo_videoenc_init),
+	(dmo_videoenc_get_property), (dmo_videoenc_set_property),
+	(dmo_videoenc_link), (dmo_videoenc_chain),
+	(dmo_videoenc_change_state), (dmo_venc_register):
+	* ext/pitfdll/general.h:
+	* ext/pitfdll/pitfdll.c: (plugin_init):
+	* ext/pitfdll/pitfdll.h:
+	* gst-libs/ext/loader/dmo/DMO_AudioDecoder.c:
+	(DMO_AudioDecoder_GetInputInfos), (DMO_AudioDecoder_Open),
+	(DMO_AudioDecoder_Destroy), (DMO_AudioDecoder_ProcessInput),
+	(DMO_AudioDecoder_ProcessOutput):
+	* gst-libs/ext/loader/dmo/DMO_AudioDecoder.h:
+	* gst-libs/ext/loader/dmo/DMO_AudioEncoder.c:
+	(DMO_AudioEncoder_GetOutputInfos),
+	(DMO_AudioEncoder_GetInputInfos), (DMO_AudioEncoder_Open),
+	(DMO_AudioEncoder_Destroy), (DMO_AudioEncoder_ProcessInput),
+	(DMO_AudioEncoder_ProcessOutput):
+	* gst-libs/ext/loader/dmo/DMO_Filter.h:
+	* gst-libs/ext/loader/dmo/DMO_VideoDecoder.c:
+	(DMO_VideoDecoder_GetOutputInfos),
+	(DMO_VideoDecoder_GetInputInfos), (DMO_VideoDecoder_Open),
+	(DMO_VideoDecoder_ProcessInput), (DMO_VideoDecoder_ProcessOutput):
+	* gst-libs/ext/loader/dmo/DMO_VideoDecoder.h:
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.c:
+	(DMO_VideoEncoder_GetInputInfos), (DMO_VideoEncoder_Open),
+	(DMO_VideoEncoder_ProcessInput), (DMO_VideoEncoder_ProcessOutput):
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.h:
+	* gst-libs/ext/loader/dmo/Makefile.am:
+	* gst-libs/ext/loader/dmo/dmo.c: (print_wave_header),
+	(print_video_header), (DMO_Filter_Destroy),
+	(DMO_Filter_LookupAudioEncoderType), (DMO_Filter_InspectPins),
+	(DMO_Filter_SetInputType), (DMO_Filter_GetInputSizeInfo),
+	(DMO_Filter_SetOutputType), (DMO_Filter_GetOutputSizeInfo),
+	(DMO_Filter_SetPartialOutputType), (DMO_Filter_Discontinuity),
+	(DMO_Filter_Create):
+	* gst-libs/ext/loader/dmo/dmo.h:
+	* gst-libs/ext/loader/dmo/dmo_guids.c:
+	* gst-libs/ext/loader/dmo/dmo_guids.h:
+	* gst-libs/ext/loader/dmo/dmo_interfaces.h: Second batch of work.
+	Working video encoder for WMV 1, 2 and 3 enters CVS, audio encoding is
+	still buggy (almost there though). Lot of cleanups in the code,
+	correct handling of time stamps all over the place. Still big work in
+	progress.
+
 2005-08-30  Ronald S. Bultje  <rbultje@ronald.bitfreak.net>
 
 	* configure.ac:

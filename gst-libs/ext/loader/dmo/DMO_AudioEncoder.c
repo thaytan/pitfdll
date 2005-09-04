@@ -17,9 +17,9 @@
 
 #include "DMO_Filter.h"
 
-#include "DMO_AudioDecoder.h"
+#include "DMO_AudioEncoder.h"
 
-struct _DMO_AudioDecoder
+struct _DMO_AudioEncoder
 { 
   DMO_Filter * m_pDMO_Filter;
   
@@ -28,9 +28,7 @@ struct _DMO_AudioDecoder
     
   WAVEFORMATEX * m_sAhdr;
   WAVEFORMATEX * m_sAhdr2;
-  
-  int m_iFlushed;
-  
+    
   unsigned long in_buffer_size;
   unsigned long out_buffer_size;
   unsigned long in_align;
@@ -47,11 +45,11 @@ struct _DMO_AudioDecoder
 #include <stdio.h>
 #include <stdlib.h>
 
-#define __MODULE__ "DirectShow audio decoder"
+#define __MODULE__ "DirectShow audio encoder"
 
 typedef long STDCALL (*GETCLASS) (GUID*, GUID*, void**);
 
-int DMO_AudioDecoder_GetOutputInfos (DMO_AudioDecoder * this, 
+int DMO_AudioEncoder_GetOutputInfos (DMO_AudioEncoder * this, 
                                      unsigned long * out_buffer_size,
                                      unsigned long * out_align)
 {
@@ -64,7 +62,7 @@ int DMO_AudioDecoder_GetOutputInfos (DMO_AudioDecoder * this,
   return TRUE;
 }
 
-int DMO_AudioDecoder_GetInputInfos (DMO_AudioDecoder * this, 
+int DMO_AudioEncoder_GetInputInfos (DMO_AudioEncoder * this, 
                                     unsigned long * in_buffer_size,
                                     unsigned long * in_align,
                                     unsigned long * lookahead)
@@ -79,83 +77,88 @@ int DMO_AudioDecoder_GetInputInfos (DMO_AudioDecoder * this,
   return TRUE;
 }
 
-DMO_AudioDecoder * DMO_AudioDecoder_Open (char * dllname, GUID * guid,
-                                          WAVEFORMATEX * format)
+DMO_AudioEncoder * DMO_AudioEncoder_Open (char * dllname, GUID * guid,
+                                          WAVEFORMATEX * target_format,
+                                          WAVEFORMATEX ** format)
 {
-  DMO_AudioDecoder * this = NULL;
+  DMO_AudioEncoder * this = NULL;
   char * error_message = NULL;
-  unsigned int bihs;
   
 #ifdef LDT_paranoia
   Setup_LDT_Keeper();
   Setup_FS_Segment();
 #endif
-  
-  print_wave_header (format);
         
-  this = malloc (sizeof (DMO_AudioDecoder));
+  this = malloc (sizeof (DMO_AudioEncoder));
   if (!this)
     return NULL;
-  memset (this, 0, sizeof (DMO_AudioDecoder));
+  memset (this, 0, sizeof (DMO_AudioEncoder));
   
-  this->m_iFlushed=1;
+  print_wave_header (target_format);
     
-  bihs = sizeof (WAVEFORMATEX) + format->cbSize;
+  /* Defining incoming type, raw audio samples */
+  this->m_sAhdr = (WAVEFORMATEX *) malloc (sizeof (WAVEFORMATEX));
   
-  /* Defining incoming type, encoded audio samples */
-  this->m_sAhdr = (WAVEFORMATEX *) malloc (bihs);
+  memset (this->m_sAhdr, 0, sizeof (WAVEFORMATEX));
   
-  memcpy (this->m_sAhdr, format, bihs);
+  this->m_sAhdr->wFormatTag = WAVE_FORMAT_PCM;
+  this->m_sAhdr->wBitsPerSample =  target_format->wBitsPerSample;
+  this->m_sAhdr->nChannels = target_format->nChannels;
+  this->m_sAhdr->nBlockAlign = this->m_sAhdr->nChannels *
+                              (this->m_sAhdr->wBitsPerSample / 8);
+  this->m_sAhdr->nSamplesPerSec = target_format->nSamplesPerSec;
+  this->m_sAhdr->nAvgBytesPerSec = this->m_sAhdr->nBlockAlign *
+                                   this->m_sAhdr->nSamplesPerSec;
+  
   memset (&this->m_sOurType, 0, sizeof (this->m_sOurType));
   
   this->m_sOurType.majortype = MEDIATYPE_Audio;
   this->m_sOurType.subtype = MEDIASUBTYPE_PCM;
-  this->m_sOurType.subtype.f1 = this->m_sAhdr->wFormatTag;
+  this->m_sOurType.subtype.f1 = WAVE_FORMAT_PCM;
   this->m_sOurType.formattype = FORMAT_WaveFormatEx;
   this->m_sOurType.lSampleSize = this->m_sAhdr->nBlockAlign;
   this->m_sOurType.bFixedSizeSamples = 1;
   this->m_sOurType.bTemporalCompression = 0;
-  this->m_sOurType.cbFormat = bihs;
+  this->m_sOurType.cbFormat = sizeof (WAVEFORMATEX);
   this->m_sOurType.pbFormat = (char *) this->m_sAhdr;
-  
-  /* Defining outcoming type, raw audio samples */
-  this->m_sAhdr2 = (WAVEFORMATEX *) malloc (sizeof (WAVEFORMATEX));
-  memset (this->m_sAhdr2, 0, sizeof (WAVEFORMATEX));
- 
-  this->m_sAhdr2->wFormatTag = WAVE_FORMAT_PCM;
-  this->m_sAhdr2->wBitsPerSample = format->wBitsPerSample;
-  this->m_sAhdr2->nChannels = format->nChannels;
-  this->m_sAhdr2->nBlockAlign = this->m_sAhdr2->nChannels *
-                                (this->m_sAhdr2->wBitsPerSample / 8);
-  this->m_sAhdr2->nSamplesPerSec = format->nSamplesPerSec;
-  this->m_sAhdr2->nAvgBytesPerSec = this->m_sAhdr2->nBlockAlign *
-                                    this->m_sAhdr2->nSamplesPerSec;
-  
-  memset (&this->m_sDestType, 0, sizeof (this->m_sDestType));
-  
-  this->m_sDestType.majortype = MEDIATYPE_Audio;
-  this->m_sDestType.subtype = MEDIASUBTYPE_PCM;
-  this->m_sDestType.formattype = FORMAT_WaveFormatEx;
-  this->m_sDestType.bFixedSizeSamples = 1;
-  this->m_sDestType.bTemporalCompression = 0;
-  this->m_sDestType.lSampleSize = this->m_sAhdr2->nBlockAlign;
-  this->m_sDestType.cbFormat = sizeof (WAVEFORMATEX);
-  this->m_sDestType.pbFormat = (char *) this->m_sAhdr2;
-  
-  print_wave_header (this->m_sAhdr);
-  print_wave_header (this->m_sAhdr2);
-  
+   
   /* Creating DMO Filter */
   this->m_pDMO_Filter = DMO_Filter_Create (dllname, guid, &this->inputs,
                                            &this->outputs, &error_message);
   if (!this->m_pDMO_Filter)
     goto beach;
   
-  if (!DMO_Filter_SetInputType (this->m_pDMO_Filter, 0, &this->m_sOurType,
-                                &error_message))
+  /* Getting the WAVEFORMATEX structure from the output pin matching with our
+     target format */
+  if (!DMO_Filter_LookupAudioEncoderType (this->m_pDMO_Filter, target_format,
+                                          &this->m_sAhdr2, &error_message))
     goto beach;
+
+  /* Defining outcoming type, encoded audio samples */
+  memset (&this->m_sDestType, 0, sizeof (this->m_sDestType));
+  
+  this->m_sDestType.majortype = MEDIATYPE_Audio;
+  this->m_sDestType.subtype = MEDIASUBTYPE_PCM;
+  this->m_sDestType.subtype.f1 = target_format->wFormatTag;
+  this->m_sDestType.formattype = FORMAT_WaveFormatEx;
+  this->m_sDestType.lSampleSize = 0;
+  this->m_sDestType.bFixedSizeSamples = 1;
+  this->m_sDestType.bTemporalCompression = 0;
+  this->m_sDestType.cbFormat = sizeof (WAVEFORMATEX) + this->m_sAhdr2->cbSize;
+  this->m_sDestType.pbFormat = (char *) this->m_sAhdr2;
+  
+  print_wave_header (this->m_sAhdr);
+  print_wave_header (this->m_sAhdr2);
+  
+  if (format) {
+    *format = this->m_sAhdr2;
+  }
+  
   if (!DMO_Filter_SetOutputType (this->m_pDMO_Filter, 0, &this->m_sDestType,
                                  &error_message))
+    goto beach;
+  if (!DMO_Filter_SetInputType (this->m_pDMO_Filter, 0, &this->m_sOurType,
+                                &error_message))
     goto beach;
   
   /* Getting informations about buffers */
@@ -169,13 +172,16 @@ DMO_AudioDecoder * DMO_AudioDecoder_Open (char * dllname, GUID * guid,
                                     &this->in_align, &error_message))
     goto beach;
   
+  if (!DMO_Filter_Discontinuity (this->m_pDMO_Filter, &error_message))
+    goto beach;
+ 
   return this;
   
 beach:
   if (this->m_pDMO_Filter)
     DMO_Filter_Destroy (this->m_pDMO_Filter);
   if (error_message) {
-    printf ("Failed creating an audio decoder: %s\n", error_message);
+    printf ("Failed creating an audio encoder: %s\n", error_message);
     free (error_message);
   }
   free(this->m_sAhdr);
@@ -185,7 +191,7 @@ beach:
 
 }
 
-void DMO_AudioDecoder_Destroy(DMO_AudioDecoder * this)
+void DMO_AudioEncoder_Destroy(DMO_AudioEncoder * this)
 {
   if (!this)
     return;
@@ -204,72 +210,13 @@ void DMO_AudioDecoder_Destroy(DMO_AudioDecoder * this)
   }
 }
 
-int DMO_AudioDecoder_Convert (DMO_AudioDecoder * this, const void * in_data,
-                              unsigned int in_size, void * out_data,
-                              unsigned int out_size, unsigned int * size_read,
-                              unsigned int * size_written)
-{
-  DMO_OUTPUT_DATA_BUFFER db;
-  CMediaBuffer * bufferin;
-  unsigned long written = 0;
-  unsigned long read = 0;
-  int r = 0;
-
-  if (!in_data || !out_data)
-	  return -1;
-
-#ifdef LDT_paranoia
-    Setup_FS_Segment ();
-#endif
-
-  /* Creating the IMediaBuffer containing input data */
-  bufferin = CMediaBufferCreate (in_size, (void *) in_data, in_size, 1);
-  r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
-        this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
-				(this->m_iFlushed) ? DMO_INPUT_DATA_BUFFERF_SYNCPOINT : 0, 0, 0);
-  
-  if (r == S_OK) {
-	  ((IMediaBuffer *) bufferin)->vt->GetBufferAndLength (
-      (IMediaBuffer *) bufferin, 0, &read);
-	  this->m_iFlushed = 0;
-  }
-
-  ((IMediaBuffer *) bufferin)->vt->Release((IUnknown *) bufferin);
-
-  /* Output data waiting for us to process it */
-  if (r == S_OK || (unsigned) r == DMO_E_NOTACCEPTING) {
-	  unsigned long status = 0;
-    
-	  db.rtTimestamp = 0;
-	  db.rtTimelength = 0;
-	  db.dwStatus = 0;
-	  db.pBuffer = (IMediaBuffer *) CMediaBufferCreate (out_size, out_data, 0, 0);
-	  
-	  r = this->m_pDMO_Filter->m_pMedia->vt->ProcessOutput (
-          this->m_pDMO_Filter->m_pMedia, 0, 1, &db, &status);
-
-	  ((IMediaBuffer *) db.pBuffer)->vt->GetBufferAndLength (
-      (IMediaBuffer *) db.pBuffer, NULL, &written);
-	  ((IMediaBuffer *) db.pBuffer)->vt->Release ((IUnknown *) db.pBuffer);
-  }
-  else if (in_size > 0)
-	  printf ("ProcessInputError  r:0x%x=%d\n", r, r);
-
-  if (size_read)
-	  *size_read = read;
-  if (size_written)
-	  *size_written = written;
-  
-  return r;
-}
-
-int DMO_AudioDecoder_ProcessInput (DMO_AudioDecoder * this,
+int DMO_AudioEncoder_ProcessInput (DMO_AudioEncoder * this,
                                    unsigned long long timestamp,
                                    unsigned long long duration,
                                    const void * in_data, unsigned int in_size,
                                    unsigned int * size_read)
 {
-  CMediaBuffer * bufferin;
+  CMediaBuffer * bufferin = NULL;
   unsigned long read = 0;
   int r = 0;
   
@@ -284,7 +231,7 @@ int DMO_AudioDecoder_ProcessInput (DMO_AudioDecoder * this,
   timestamp /= 100;
   duration /= 100;
 
-  /* Creating the IMediaBuffer containing input data */
+  /* Creating the IMediaBuffer containing input data (copy) */
   bufferin = CMediaBufferCreate (in_size, (void *) in_data, in_size, 1);
   
   if (duration) {
@@ -301,10 +248,10 @@ int DMO_AudioDecoder_ProcessInput (DMO_AudioDecoder * this,
 				  DMO_INPUT_DATA_BUFFERF_SYNCPOINT, 0, 0);
   }
 
- ((IMediaBuffer *) bufferin)->vt->GetBufferAndLength ((IMediaBuffer *) bufferin,
-                                                      0, &read);
+  ((IMediaBuffer *) bufferin)->vt->GetBufferAndLength ((IMediaBuffer *) bufferin,
+                                                       NULL, &read);
 
-  ((IMediaBuffer *) bufferin)->vt->Release((IUnknown *) bufferin);
+  ((IMediaBuffer *) bufferin)->vt->Release ((IUnknown *) bufferin);
 
   if (size_read)
 	  *size_read = read;
@@ -319,7 +266,7 @@ int DMO_AudioDecoder_ProcessInput (DMO_AudioDecoder * this,
   }
 }
 
-int DMO_AudioDecoder_ProcessOutput (DMO_AudioDecoder * this,
+int DMO_AudioEncoder_ProcessOutput (DMO_AudioEncoder * this,
                                     void * out_data, unsigned int out_size,
                                     unsigned int * size_written,
                                     unsigned long long * timestamp,
@@ -356,6 +303,8 @@ int DMO_AudioDecoder_ProcessOutput (DMO_AudioDecoder * this,
                                      DMO_PROCESS_OUTPUT_DISCARD_WHEN_NO_BUFFER,
                                      this->outputs, db, &status);
     
+  printf ("dwStatus 0 is %d r is %d 0x%X\n", db[0].dwStatus, r, r);
+  
 	((IMediaBuffer *) db[0].pBuffer)->vt->GetBufferAndLength (
                                        (IMediaBuffer *) db[0].pBuffer, NULL,
                                        &written);
@@ -373,6 +322,7 @@ int DMO_AudioDecoder_ProcessOutput (DMO_AudioDecoder * this,
   }
   
   if ((db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE) != 0) {
+    printf ("I have more data to output\n");
     free (db);
     return TRUE;
   }

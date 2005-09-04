@@ -3,6 +3,8 @@
 
 #include <glib.h>
 
+#define WAVE_FORMAT_PCM     1
+
 typedef struct _GUID {
   guint32 a;
   guint16 b, c;

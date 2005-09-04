@@ -41,6 +41,7 @@ plugin_init (GstPlugin * plugin)
   dmo_vdec_register (plugin);
   dmo_venc_register (plugin);
   dmo_adec_register (plugin);
+  dmo_aenc_register (plugin);
 
   qt_adec_register (plugin);
 

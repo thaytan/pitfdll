@@ -33,10 +33,18 @@ typedef struct _DMOVideoDec {
 
   GstPad *srcpad, *sinkpad;
 
+  GstBuffer *out_buffer;
+  
   /* settings */
   gint w, h;
   gdouble fps;
+  
   void *ctx;
+  gulong out_buffer_size;
+  gulong in_buffer_size;
+  gulong lookahead;
+  gulong out_align;
+  gulong in_align;
   ldt_fs_t *ldt_fs;
 } DMOVideoDec;
 
@@ -126,6 +134,7 @@ dmo_videodec_init (DMOVideoDec * dec)
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
 
   dec->ctx = NULL;
+  dec->out_buffer = NULL;
 }
 
 static void
@@ -192,6 +201,11 @@ dmo_videodec_link (GstPad * pad, const GstCaps * caps)
   }
   g_free (dll);
   g_free (hdr);
+  
+  DMO_VideoDecoder_GetOutputInfos (dec->ctx, &dec->out_buffer_size,
+                                   &dec->out_align);
+  DMO_VideoDecoder_GetInputInfos (dec->ctx, &dec->in_buffer_size,
+                                  &dec->in_align, &dec->lookahead);
 
   /* negotiate output */
   out = gst_caps_new_simple ("video/x-raw-yuv",
@@ -215,19 +229,65 @@ static void
 dmo_videodec_chain (GstPad * pad, GstData * data)
 {
   DMOVideoDec *dec = (DMOVideoDec *) gst_pad_get_parent (pad);
-  GstBuffer *in, *out;
+  GstBuffer *in_buffer = NULL;
+  guint read = 0, wrote = 0, status = FALSE;
 
   Check_FS_Segment ();
 
-  /* decode */
-  in = GST_BUFFER (data);
-  out = gst_buffer_new_and_alloc (ALIGN_2 (dec->w) * dec->h * 2);
-  GST_BUFFER_TIMESTAMP (out) = GST_BUFFER_TIMESTAMP (in);
-  GST_BUFFER_DURATION (out) = GST_BUFFER_DURATION (in);
-  DMO_VideoDecoder_DecodeInternal (dec->ctx,
-      GST_BUFFER_DATA (in), GST_BUFFER_SIZE (in), 1, GST_BUFFER_DATA (out));
-  gst_data_unref (data);
-  gst_pad_push (dec->srcpad, GST_DATA (out));
+  in_buffer = GST_BUFFER (data);
+  
+  /* encode */
+  status = DMO_VideoDecoder_ProcessInput (dec->ctx,
+                                          GST_BUFFER_TIMESTAMP (in_buffer),
+                                          GST_BUFFER_DURATION (in_buffer),
+                                          GST_BUFFER_DATA (in_buffer),
+                                          GST_BUFFER_SIZE (in_buffer),
+                                          &read);
+  
+  GST_DEBUG ("read %d out of %d, time %llu duration %llu", read,
+             GST_BUFFER_SIZE (in_buffer),
+             GST_BUFFER_TIMESTAMP (in_buffer),
+             GST_BUFFER_DURATION (in_buffer));
+  
+  if (!dec->out_buffer) {
+    dec->out_buffer = gst_buffer_new_and_alloc (dec->out_buffer_size);
+    /* If the DMO can not set the timestamp we do our best guess */
+    GST_BUFFER_TIMESTAMP (dec->out_buffer) = GST_BUFFER_TIMESTAMP (in_buffer);
+  }
+
+  /* If the DMO can not set the duration we do our best guess */
+  GST_BUFFER_DURATION (dec->out_buffer) += GST_BUFFER_DURATION (in_buffer);
+  
+  gst_buffer_unref (in_buffer);
+  in_buffer = NULL;
+  
+  if (status == FALSE) {
+    GstClockTime timestamp = GST_BUFFER_TIMESTAMP (dec->out_buffer);
+    GST_DEBUG ("we have some output buffers to collect (size is %d)",
+               GST_BUFFER_SIZE (dec->out_buffer));
+    /* Loop until the last buffer (returns FALSE) */
+    while ((status = DMO_VideoDecoder_ProcessOutput (dec->ctx,
+                           GST_BUFFER_DATA (dec->out_buffer),
+                           GST_BUFFER_SIZE (dec->out_buffer),
+                           &wrote,
+                           &(GST_BUFFER_TIMESTAMP (dec->out_buffer)),
+                           &(GST_BUFFER_DURATION (dec->out_buffer)))) == TRUE) {
+      GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
+                 wrote, GST_BUFFER_TIMESTAMP (dec->out_buffer), GST_BUFFER_DURATION (dec->out_buffer));
+      GST_BUFFER_SIZE (dec->out_buffer) = wrote;
+      gst_pad_push (dec->srcpad, GST_DATA (dec->out_buffer));
+      dec->out_buffer = gst_buffer_new_and_alloc (dec->out_buffer_size);
+      /* If the DMO can not set the timestamp we do our best guess */
+      GST_BUFFER_TIMESTAMP (dec->out_buffer) = timestamp;
+      GST_BUFFER_DURATION (dec->out_buffer) = 0;
+    }
+    GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
+               GST_BUFFER_TIMESTAMP (dec->out_buffer),
+               GST_BUFFER_DURATION (dec->out_buffer));
+    GST_BUFFER_SIZE (dec->out_buffer) = wrote;
+    gst_pad_push (dec->srcpad, GST_DATA (dec->out_buffer));
+    dec->out_buffer = NULL;
+  }
 }
 
 static GstElementStateReturn

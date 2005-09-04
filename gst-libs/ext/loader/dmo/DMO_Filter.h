@@ -13,11 +13,15 @@ typedef struct _DMO_Filter {
   IDMOVideoOutputOptimizations * m_pOptim;
   IMediaObject * m_pMedia;
   IMediaObjectInPlace * m_pInPlace;
+  IWMCodecPrivateData * m_pPrivateData;
   DMO_MEDIA_TYPE * m_pOurType;
   DMO_MEDIA_TYPE * m_pDestType;
 } DMO_Filter;
 
 typedef struct _CMediaBuffer CMediaBuffer;
+
+void print_wave_header(WAVEFORMATEX *h);
+void print_video_header(VIDEOINFOHEADER *h);
 
 /**
  * Create DMO_Filter object.
@@ -31,19 +35,37 @@ DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID * id,
  */
 void DMO_Filter_Destroy (DMO_Filter * This);
 
+int DMO_Filter_LookupAudioEncoderType (DMO_Filter * This, WAVEFORMATEX * target,
+                                       WAVEFORMATEX ** type,
+                                       char ** error_message);
+
 int DMO_Filter_InspectPins (DMO_Filter * This, char ** error_message);
 
 int DMO_Filter_SetInputType (DMO_Filter * This, unsigned long pin_id,
                              DMO_MEDIA_TYPE * in_fmt,
-                             unsigned long * buffer_size,
-                             unsigned long * lookahead,
-                             unsigned long * align, char ** error_message);
+                             char ** error_message);
+                             
+int DMO_Filter_GetInputSizeInfo (DMO_Filter * This, unsigned long pin_id,
+                                 unsigned long * buffer_size,
+                                 unsigned long * lookahead,
+                                 unsigned long * align, char ** error_message);
 
 int DMO_Filter_SetOutputType (DMO_Filter * This, unsigned long pin_id,
                               DMO_MEDIA_TYPE * out_fmt,
-                              unsigned long * buffer_size,
-                              unsigned long * align, char ** error_message);
-                               
+                              char ** error_message);
+                              
+int DMO_Filter_GetOutputSizeInfo (DMO_Filter * This, unsigned long pin_id,
+                                  unsigned long * buffer_size,
+                                  unsigned long * align, char ** error_message);
+                              
+int DMO_Filter_SetPartialOutputType (DMO_Filter * This,
+                                     unsigned long * data_length,
+                                     char ** data,
+                                     DMO_MEDIA_TYPE * out_fmt,
+                                     char ** error_message);
+                                     
+int DMO_Filter_Discontinuity (DMO_Filter * This, char ** error_message);
+
 /**
  * Create IMediaBuffer object - to pass/receive data from DMO_Filter
  *

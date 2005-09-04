@@ -13,6 +13,7 @@ libpitfdll_la_SOURCES = \
 	dmo_vdec.c \
 	dmo_venc.c \
 	dmo_adec.c \
+	dmo_aenc.c \
 	qt_adec.c
 
 libpitfdll_la_CFLAGS = \
