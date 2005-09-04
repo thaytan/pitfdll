@@ -1,5 +1,9 @@
 2005-09-04  Julien MOUTTE  <julien@moutte.net>
 
+	* gst-libs/ext/loader/dmo/DMO_AudioEncoder.h: Forgot this one.
+
+2005-09-04  Julien MOUTTE  <julien@moutte.net>
+
 	* ext/pitfdll/Makefile.am:
 	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_base_init),
 	(dmo_audiodec_init), (dmo_audiodec_link), (dmo_audiodec_chain),
