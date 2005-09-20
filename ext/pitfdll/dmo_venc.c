@@ -37,6 +37,8 @@ typedef struct _DMOVideoEnc {
 
   /* settings */
   gint w, h;
+  gboolean vbr;
+  gint quality;
   gint bitrate;
   gdouble fps;
   
@@ -67,7 +69,9 @@ static GstElementClass *parent_class = NULL;
 enum
 {
   ARG_0,
-  ARG_BITRATE
+  ARG_BITRATE,
+  ARG_QUALITY,
+  ARG_VBR
 };
 
 /*
@@ -94,11 +98,16 @@ dmo_videoenc_base_init (DMOVideoEncClass * klass)
   g_free (details.description);
   g_free (details.longname);
 
-  sinkcaps = gst_caps_from_string ("video/x-raw-rgb; video/x-raw-yuv");
+  if (tmp->sinkcaps) {
+    sinkcaps = gst_caps_from_string (tmp->sinkcaps);
+  }
+  else {
+    sinkcaps = gst_caps_from_string ("video/x-raw-rgb; video/x-raw-yuv");
+  }
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
   
-  /* sink caps */
-  srccaps = gst_caps_from_string (tmp->caps);
+  /* src caps */
+  srccaps = gst_caps_from_string (tmp->srccaps);
   gst_caps_set_simple (srccaps,
       "width", GST_TYPE_INT_RANGE, 16, 4096,
       "height", GST_TYPE_INT_RANGE, 16, 4096,
@@ -127,7 +136,15 @@ dmo_videoenc_class_init (DMOVideoEncClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_BITRATE,
       g_param_spec_int ("bitrate", "Video bitrate",
           "Defines the video bitrate the codec will try to reach.",
-          G_MININT, G_MAXINT, 0, G_PARAM_READWRITE));
+          0, 2048256, 128016, G_PARAM_READWRITE));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_QUALITY,
+      g_param_spec_int ("quality", "Video quality",
+          "Defines the video quality the codec will try to reach.",
+          0, 100, 75, G_PARAM_READWRITE));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_VBR,
+      g_param_spec_boolean ("vbr", "Variable BitRate",
+          "Defines if the video encoder should use a variable bitrate.",
+          FALSE, G_PARAM_READWRITE));
 }
 
 static void
@@ -150,6 +167,9 @@ dmo_videoenc_init (DMOVideoEnc * enc)
   enc->ctx = NULL;
   enc->out_buffer = NULL;
   
+  enc->vbr = FALSE;
+  enc->quality = 0;
+  enc->bitrate = 241000;
   enc->out_buffer_size = 0;
   enc->out_align = 0;
 }
@@ -165,6 +185,12 @@ dmo_videoenc_get_property (GObject * object, guint prop_id, GValue * value,
   switch (prop_id) {
     case ARG_BITRATE:
       g_value_set_int (value, enc->bitrate);
+      break;
+    case ARG_QUALITY:
+      g_value_set_int (value, enc->quality);
+      break;
+    case ARG_VBR:
+      g_value_set_boolean (value, enc->vbr);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -183,6 +209,12 @@ dmo_videoenc_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case ARG_BITRATE:
       enc->bitrate = g_value_get_int (value);
+      break;
+    case ARG_QUALITY:
+      enc->quality = g_value_get_int (value);
+      break;
+    case ARG_VBR:
+      enc->vbr = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -243,19 +275,33 @@ dmo_videoenc_link (GstPad * pad, const GstCaps * caps)
   }
   /* else if (gst_structure_has_name (s, "video/x-raw-yuv")) {*/
   else if (strcmp (structure_name, "video/x-raw-yuv") == 0) {
-    if (!gst_structure_get_fourcc (s, "format", &hdr->compression))
+    if (!gst_structure_get_fourcc (s, "format", (guint32 *) &hdr->compression))
       return GST_PAD_LINK_REFUSED;
     GST_DEBUG ("Using YUV with fourcc");
   }
   GST_DEBUG ("Will now open %s using %dx%d@%lffps",
 	           dll, enc->w, enc->h, enc->fps);
-  if (!(enc->ctx = DMO_VideoEncoder_Open (dll, &(klass->entry->guid), hdr, 
-                                          klass->entry->format, 241000,
-                                          enc->fps, &data, &data_length))) {
-    GST_ERROR ("Failed to open DLL %s", dll);
-    g_free (dll);
-    g_free (hdr);
-    return GST_PAD_LINK_REFUSED;
+  if (enc->vbr) {
+    if (!(enc->ctx = DMO_VideoEncoder_Open (dll, &(klass->entry->guid), hdr, 
+                                            klass->entry->format, enc->vbr,
+                                            enc->quality, enc->fps,
+                                            &data, &data_length))) {
+      GST_ERROR ("Failed to open DLL %s", dll);
+      g_free (dll);
+      g_free (hdr);
+      return GST_PAD_LINK_REFUSED;
+    }
+  }
+  else {
+    if (!(enc->ctx = DMO_VideoEncoder_Open (dll, &(klass->entry->guid), hdr, 
+                                            klass->entry->format, enc->vbr,
+                                            enc->bitrate, enc->fps,
+                                            &data, &data_length))) {
+      GST_ERROR ("Failed to open DLL %s", dll);
+      g_free (dll);
+      g_free (hdr);
+      return GST_PAD_LINK_REFUSED;
+    }
   }
   g_free (dll);
   g_free (hdr);
@@ -264,7 +310,7 @@ dmo_videoenc_link (GstPad * pad, const GstCaps * caps)
                                    &enc->out_align);
   
   /* negotiate output */
-  out = gst_caps_from_string (klass->entry->caps);
+  out = gst_caps_from_string (klass->entry->srccaps);
   if (data_length) {
     extradata = gst_buffer_new_and_alloc (data_length);
     memcpy ((char *) GST_BUFFER_DATA (extradata), (char *) data, data_length);
@@ -391,14 +437,17 @@ static const CodecEntry codecs[] = {
   { "wmvdmoe2", { 0x96b57cdd, 0x8966, 0x410c,
 		 0xbb, 0x1f, 0xc9, 0x7e, 0xea, 0x76, 0x5c, 0x04 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '1'), 1, "Windows Media Video",
+    "video/x-raw-yuv",
     "video/x-wmv, wmvversion = (int) 1" },
   { "wmvdmoe2", { 0x96b57cdd, 0x8966, 0x410c,
 		 0xbb, 0x1f, 0xc9, 0x7e, 0xea, 0x76, 0x5c, 0x04 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '2'), 2, "Windows Media Video",
+    "video/x-raw-yuv",
     "video/x-wmv, wmvversion = (int) 2" },
   { "wmvdmoe2", { 0x96b57cdd, 0x8966, 0x410c,
 		 0xbb, 0x1f, 0xc9, 0x7e, 0xea, 0x76, 0x5c, 0x04 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '3'), 3, "Windows Media Video",
+    "video/x-raw-yuv",
     "video/x-wmv, wmvversion = (int) 3" },
   { NULL }
 };

@@ -6,6 +6,7 @@ typedef struct _DMO_VideoEncoder DMO_VideoEncoder;
 DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
                                           BITMAPINFOHEADER * format,
                                           unsigned int dest_fourcc,
+                                          unsigned int vbr,
                                           unsigned long bitrate,
                                           float framerate,
                                           char ** data,

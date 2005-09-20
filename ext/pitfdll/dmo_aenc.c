@@ -36,6 +36,8 @@ typedef struct _DMOAudioEnc {
   GstBuffer *out_buffer;
 
   /* settings */
+  gboolean vbr;
+  gint quality;
   gint bitrate;
   gint channels;
   gint rate;
@@ -72,7 +74,9 @@ static GstElementClass *parent_class = NULL;
 enum
 {
   ARG_0,
-  ARG_BITRATE
+  ARG_BITRATE,
+  ARG_QUALITY,
+  ARG_VBR
 };
 
 /*
@@ -100,12 +104,17 @@ dmo_audioenc_base_init (DMOAudioEncClass * klass)
   g_free (details.longname);
 
   /* sink, simple */
-  sinkcaps = gst_caps_from_string ("audio/x-raw-int, signed = (boolean) true" \
-                                   ", endianness = (int) 1234");
+  if (tmp->sinkcaps) {
+    sinkcaps = gst_caps_from_string (tmp->sinkcaps);
+  }
+  else {
+    sinkcaps = gst_caps_from_string ("audio/x-raw-int, signed = (boolean) true" \
+                                     ", endianness = (int) 1234");
+  }
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
   
   /* source caps */
-  srccaps = gst_caps_from_string (tmp->caps);
+  srccaps = gst_caps_from_string (tmp->srccaps);
   gst_caps_set_simple (srccaps,
       "block_align", GST_TYPE_INT_RANGE, 0, G_MAXINT,
       "bitrate", GST_TYPE_INT_RANGE, 0, G_MAXINT,
@@ -135,7 +144,15 @@ dmo_audioenc_class_init (DMOAudioEncClass * klass)
   g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_BITRATE,
       g_param_spec_int ("bitrate", "Audio bitrate",
           "Defines the audio bitrate the codec will try to reach.",
-          G_MININT, G_MAXINT, 128016, G_PARAM_READWRITE));
+          0, 2048256, 128016, G_PARAM_READWRITE));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_QUALITY,
+      g_param_spec_int ("quality", "Audio quality",
+          "Defines the audio quality the codec will try to reach.",
+          0, 100, 75, G_PARAM_READWRITE));
+  g_object_class_install_property (G_OBJECT_CLASS (klass), ARG_VBR,
+      g_param_spec_boolean ("vbr", "Variable BitRate",
+          "Defines if the audio encoder should use a variable bitrate.",
+          FALSE, G_PARAM_READWRITE));
 }
 
 static void
@@ -159,6 +176,8 @@ dmo_audioenc_init (DMOAudioEnc * enc)
   enc->out_buffer = NULL;
   
   /* Usual defaults */
+  enc->vbr = FALSE;
+  enc->quality = 0;
   enc->channels = 2;
   enc->bitrate = 128016;
   enc->depth = 16;
@@ -178,6 +197,12 @@ dmo_audioenc_get_property (GObject * object, guint prop_id, GValue * value,
     case ARG_BITRATE:
       g_value_set_int (value, enc->bitrate);
       break;
+    case ARG_QUALITY:
+      g_value_set_int (value, enc->quality);
+      break;
+    case ARG_VBR:
+      g_value_set_boolean (value, enc->vbr);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -195,6 +220,12 @@ dmo_audioenc_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case ARG_BITRATE:
       enc->bitrate = g_value_get_int (value);
+      break;
+    case ARG_QUALITY:
+      enc->quality = g_value_get_int (value);
+      break;
+    case ARG_VBR:
+      enc->vbr = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -243,13 +274,16 @@ dmo_audioenc_link (GstPad * pad, const GstCaps * caps)
   target_format->wFormatTag = klass->entry->format;
   target_format->nChannels = enc->channels;
   target_format->nSamplesPerSec = enc->rate;
-  target_format->nAvgBytesPerSec = enc->bitrate / 8;
+  if (enc->vbr)
+    target_format->nAvgBytesPerSec = enc->quality;
+  else
+    target_format->nAvgBytesPerSec = enc->bitrate / 8;
   target_format->wBitsPerSample = enc->depth;
   GST_DEBUG ("Will now open %s using %d Hz %d channels, %d depth to encode " \
              "at %d bps", dll, enc->rate, enc->channels, enc->depth,
              enc->bitrate);
   if (!(enc->ctx = DMO_AudioEncoder_Open (dll, &klass->entry->guid,
-                                          target_format, &format))) {
+                                          target_format, &format, enc->vbr))) {
     GST_ERROR ("Failed to open DLL %s", dll);
     g_free (dll);
     g_free (target_format);
@@ -272,7 +306,7 @@ dmo_audioenc_link (GstPad * pad, const GstCaps * caps)
   GST_DEBUG ("in_buffer_size is %d, in_align is %d, lookahead is %d", enc->in_buffer_size, enc->in_align, enc->lookahead);
   
   /* negotiate output */
-  out = gst_caps_from_string (klass->entry->caps);
+  out = gst_caps_from_string (klass->entry->srccaps);
   
   if (format->cbSize) {
     extradata = gst_buffer_new_and_alloc (format->cbSize);
@@ -405,21 +439,33 @@ dmo_audioenc_change_state (GstElement * element)
  */
 
 static const CodecEntry codecs[] = {
-  { "wmadmoe", { 0x70f598e9, 0xF4ab, 0x495a,
+  { "wmadmoe", { 0x70f598e9, 0xf4ab, 0x495a,
 		  0x99, 0xe2, 0xa7, 0xc4, 0xd3, 0xd8, 0x9a, 0xbf },
     0x00000160, 1, "Windows Media Audio",
+    "audio/x-raw-int, " \
+    "depth = (int) 16, width = (int) 16, "
+    "signed = (boolean) true , endianness = (int) 1234",
     "audio/x-wma, wmaversion = (int) 1" },
-  { "wmadmoe", { 0x70f598e9, 0xF4ab, 0x495a,
+  { "wmadmoe", { 0x70f598e9, 0xf4ab, 0x495a,
 		  0x99, 0xe2, 0xa7, 0xc4, 0xd3, 0xd8, 0x9a, 0xbf },
     0x00000161, 2, "Windows Media Audio",
-    "audio/x-wma, wmaversion = (int) 2" },
-  { "wmadmoe", { 0x70f598e9, 0xF4ab, 0x495a,
+    "audio/x-raw-int, channels = (int) [ 1, 2 ], " \
+    "depth = (int) 16, width = (int) 16, "
+    "signed = (boolean) true , endianness = (int) 1234",
+    "audio/x-wma, wmaversion = (int) 2, depth = (int) 16, width = (int) 16" },
+  { "wmadmoe", { 0x70f598e9, 0xf4ab, 0x495a,
 		  0x99, 0xe2, 0xa7, 0xc4, 0xd3, 0xd8, 0x9a, 0xbf },
     0x00000162, 3, "Windows Media Audio",
+    "audio/x-raw-int, channels = (int) [ 2, 8 ], " \
+    "depth = (int) 24, width = (int) 24, "
+    "signed = (boolean) true , endianness = (int) 1234",
     "audio/x-wma, wmaversion = (int) 3" },
   { "wmspdmoe", { 0x67841b03, 0xc689, 0x4188,
 		  0xad, 0x3f, 0x4c, 0x9e, 0xbe, 0xec, 0x71, 0x0b },
     0x0000000a, 1, "Windows Media Speech",
+    "audio/x-raw-int, rate = (int) [ 8000, 22050 ], " \
+    "depth = (int) 16, width = (int) 16, channels = (int) 1, "
+    "signed = (boolean) true , endianness = (int) 1234",
     "audio/x-wmsp" },
   { NULL }
 };

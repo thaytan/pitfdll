@@ -91,7 +91,7 @@ DMO_AudioDecoder * DMO_AudioDecoder_Open (char * dllname, GUID * guid,
   Setup_FS_Segment();
 #endif
   
-  print_wave_header (format);
+  /* print_wave_header (format); */
         
   this = malloc (sizeof (DMO_AudioDecoder));
   if (!this)
@@ -142,8 +142,8 @@ DMO_AudioDecoder * DMO_AudioDecoder_Open (char * dllname, GUID * guid,
   this->m_sDestType.cbFormat = sizeof (WAVEFORMATEX);
   this->m_sDestType.pbFormat = (char *) this->m_sAhdr2;
   
-  print_wave_header (this->m_sAhdr);
-  print_wave_header (this->m_sAhdr2);
+  /* print_wave_header (this->m_sAhdr);
+     print_wave_header (this->m_sAhdr2); */
   
   /* Creating DMO Filter */
   this->m_pDMO_Filter = DMO_Filter_Create (dllname, guid, &this->inputs,

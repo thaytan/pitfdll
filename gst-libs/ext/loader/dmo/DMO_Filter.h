@@ -14,6 +14,7 @@ typedef struct _DMO_Filter {
   IMediaObject * m_pMedia;
   IMediaObjectInPlace * m_pInPlace;
   IWMCodecPrivateData * m_pPrivateData;
+  IPropertyBag * m_pPropertyBag;
   DMO_MEDIA_TYPE * m_pOurType;
   DMO_MEDIA_TYPE * m_pDestType;
 } DMO_Filter;
@@ -22,6 +23,11 @@ typedef struct _CMediaBuffer CMediaBuffer;
 
 void print_wave_header(WAVEFORMATEX *h);
 void print_video_header(VIDEOINFOHEADER *h);
+
+static const char g_wszWMVCPassesUsed[] = {'_','\0','P','\0','A','\0','S','\0','S','\0','E','\0','S','\0','U','\0','S','\0','E','\0','D','\0','\0','\0'};
+static const char g_wszWMACAvgBytesPerSec[] = {'A','\0','v','\0','g','\0','B','\0','y','\0','t','\0','e','\0','s','\0','P','\0','e','\0','r','\0','S','\0','e','\0','c','\0','\0','\0'};
+static const char g_wszWMVCVBREnabled[] = {'_','\0','V','\0','B','\0','R','\0','E','\0','N','\0','A','\0','B','\0','L','\0','E','\0','D','\0','\0','\0'};
+static const char g_wszWMVCVBRQuality[] = {'_','\0','V','\0','B','\0','R','\0','Q','\0','U','\0','A','\0','L','\0','I','\0','T','\0','Y','\0','\0','\0'};
 
 /**
  * Create DMO_Filter object.
@@ -36,7 +42,7 @@ DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID * id,
 void DMO_Filter_Destroy (DMO_Filter * This);
 
 int DMO_Filter_LookupAudioEncoderType (DMO_Filter * This, WAVEFORMATEX * target,
-                                       WAVEFORMATEX ** type,
+                                       DMO_MEDIA_TYPE * type, int vbr,
                                        char ** error_message);
 
 int DMO_Filter_InspectPins (DMO_Filter * This, char ** error_message);
@@ -63,6 +69,11 @@ int DMO_Filter_SetPartialOutputType (DMO_Filter * This,
                                      char ** data,
                                      DMO_MEDIA_TYPE * out_fmt,
                                      char ** error_message);
+
+int DMO_Filter_SetProperty (DMO_Filter * This, const WCHAR * name,
+                            VARIANT * value, char ** error_message);
+int DMO_Filter_GetProperty (DMO_Filter * This, const WCHAR * name,
+                            VARIANT * value, char ** error_message);
                                      
 int DMO_Filter_Discontinuity (DMO_Filter * This, char ** error_message);
 

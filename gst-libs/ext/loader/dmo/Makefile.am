@@ -17,7 +17,8 @@ noinst_HEADERS = \
 	DMO_Filter.h \
 	dmo.h \
 	dmo_guids.h \
-	dmo_interfaces.h
+	dmo_interfaces.h \
+	variant.h
 
 INCLUDES = \
 	-DNOAVIFILE_HEADERS \

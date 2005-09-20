@@ -14,7 +14,10 @@ void print_wave_header(WAVEFORMATEX *h){
   printf("Format Tag: %d (0x%X)\n",h->wFormatTag,h->wFormatTag);
   printf("Channels: %d\n",h->nChannels);
   printf("Samplerate: %ld\n",h->nSamplesPerSec);
-  printf("avg byte/sec: %ld\n",h->nAvgBytesPerSec);
+  if ((h->nAvgBytesPerSec & 0x7FFFFF00) == 0x7FFFFF00)
+    printf("VBR Quality: %ld%%\n",h->nAvgBytesPerSec & 0x000000FF);
+  else    
+    printf("avg byte/sec: %ld\n",h->nAvgBytesPerSec);
   printf("Block align: %d\n",h->nBlockAlign);
   printf("bits/sample: %d\n",h->wBitsPerSample);
   printf("cbSize: %d\n",h->cbSize);
@@ -68,6 +71,8 @@ void DMO_Filter_Destroy (DMO_Filter * This)
   if (!This)
     return;
   
+  if (This->m_pPropertyBag)
+    This->m_pPropertyBag->vt->Release ((IUnknown *) This->m_pPropertyBag);
   if (This->m_pPrivateData)
     This->m_pPrivateData->vt->Release ((IUnknown *) This->m_pPrivateData);
   if (This->m_pOptim)
@@ -82,88 +87,45 @@ void DMO_Filter_Destroy (DMO_Filter * This)
 }
 
 int DMO_Filter_LookupAudioEncoderType (DMO_Filter * This, WAVEFORMATEX * target,
-                                       WAVEFORMATEX ** type,
+                                       DMO_MEDIA_TYPE * type, int vbr,
                                        char ** error_message)
 {
   HRESULT hr = 0;
   char * local_error = NULL;
-  DMO_MEDIA_TYPE mt;
-  DMO_MEDIA_TYPE ** types = NULL;
-  unsigned long nbTypes = 0, dwType = 0, index = 0;
-  long best_index = -1, min_bitrate_gap = -1;
+  WAVEFORMATEX * format = NULL;
+  unsigned long dwType = 0, found = 0;
   
   if (!This || !This->m_pMedia || !This->m_pMedia->vt) {
     asprintf (&local_error, "invalid reference to the DMO object %p", This);
     goto beach;
   }
-  
-  /* First hit to the list */
-  hr = This->m_pMedia->vt->GetOutputType (This->m_pMedia, 0, dwType, &mt);
-  
-  /* If you don't know what you want... Take that ! */
-  if (!target) {
-    WAVEFORMATEX * format = (WAVEFORMATEX *) mt.pbFormat;
-    *type = (WAVEFORMATEX *) calloc (1, sizeof (WAVEFORMATEX) + format->cbSize);
-    memcpy (*type, format, sizeof (WAVEFORMATEX) + format->cbSize);
-    goto beach;
-  }
-  
-  /* Loop until there's no more types */
-  while (hr == S_OK) {
-    WAVEFORMATEX * format = (WAVEFORMATEX *) mt.pbFormat;
+
+  /* We are leaking all that memory, sorry but i don't know how to free that
+     correctly using the wrapped DMO functions (FIXME) */
+  do {
+    hr = This->m_pMedia->vt->GetOutputType (This->m_pMedia, 0, dwType, type);
+    if (hr != S_OK)
+      break;
     
-    /* We match any fixed parameters like format, bitrate, channels, depth */
+    format = (WAVEFORMATEX *) type->pbFormat;
+    
     if (format && format->wFormatTag == target->wFormatTag &&
         format->nSamplesPerSec == target->nSamplesPerSec &&
         format->wBitsPerSample == target->wBitsPerSample &&
         format->nChannels == target->nChannels) {
-      long bitrate_gap = 0;
-      long type_size = sizeof (DMO_MEDIA_TYPE) + sizeof (WAVEFORMATEX) + format->cbSize;
-      nbTypes++;
-      types = realloc (types, sizeof (DMO_MEDIA_TYPE *) * nbTypes);
-      types[nbTypes - 1] = (DMO_MEDIA_TYPE *) calloc (1, type_size);
-      memcpy ((char *) types[nbTypes - 1], &mt, type_size);
-      print_wave_header ((WAVEFORMATEX *) types[nbTypes - 1]->pbFormat);
-      /* We try to identify the format with the closest birate */
-      bitrate_gap = abs (format->nAvgBytesPerSec - target->nAvgBytesPerSec);
-      if (bitrate_gap <= min_bitrate_gap || min_bitrate_gap == -1) {
-        min_bitrate_gap = bitrate_gap;
-        best_index = index;
+      if (vbr && ((format->nAvgBytesPerSec & 0x7FFFFF00) == 0x7FFFFF00)) {
+        int quality = format->nAvgBytesPerSec & 0x000000FF;
+        if (quality == target->nAvgBytesPerSec)
+          found = TRUE;
       }
-      index++;
+      else {
+        if (format->nAvgBytesPerSec == target->nAvgBytesPerSec)
+          found = TRUE;
+      }
     }
     
     dwType++;
-    
-    /* Trying to free the allocated structure. Not really sure we do that 
-       correctly. FIXME 
-    if (mt.pbFormat)
-      free (mt.pbFormat);
-    memset (&mt, 0, sizeof (DMO_MEDIA_TYPE) + sizeof (WAVEFORMATEX) + format->cbSize);*/
-   
-    hr = This->m_pMedia->vt->GetOutputType (This->m_pMedia, 0, dwType, &mt);
-  }
-    
-  if (!nbTypes) {
-    asprintf (&local_error, "found no type matching with the target format");
-    goto beach;
-  }
-  
-  if (type && best_index >= 0) {
-    WAVEFORMATEX * format = (WAVEFORMATEX *) types[best_index]->pbFormat;
-    *type = (WAVEFORMATEX *) calloc (1, sizeof (WAVEFORMATEX) + format->cbSize);
-    memcpy (*type, format, sizeof (WAVEFORMATEX) + format->cbSize);
-  }
-  else {
-    asprintf (&local_error, "no matching type was found or you were not expecting any return");
-    *type = NULL;
-  }
-  
-  for (index = 0; index < nbTypes; index++) {
-    free (types[index]);
-  }
-  
-  free (types);
+  } while (found == FALSE);
   
 beach:
   if (error_message && local_error) {
@@ -462,8 +424,6 @@ int DMO_Filter_SetPartialOutputType (DMO_Filter * This,
   
   if (*data_length == 0)
     goto beach;
-  else
-    printf ("data length is %d\n", *data_length);
   
   *data = malloc (*data_length);
   
@@ -506,6 +466,62 @@ beach:
     return FALSE;
   }
   return TRUE;   
+}
+
+int DMO_Filter_SetProperty (DMO_Filter * This, const WCHAR * name,
+                            VARIANT * value, char ** error_message)
+{
+  HRESULT hr = 1;
+  char * local_error = NULL;
+  
+  if (!This || !This->m_pPropertyBag || !This->m_pPropertyBag->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p or this " \
+              "DMO does not support the IPropertyBag interface", This);
+    goto beach;
+  }
+  
+  hr = This->m_pPropertyBag->vt->Write (This->m_pPropertyBag,
+                                        (LPCOLESTR) name, value);
+  if (hr != S_OK) {
+    asprintf (&local_error, "unexpected error when trying to set property " \
+              "named %ls: 0x%lx", name, hr);
+    goto beach;
+  }
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE;    
+}
+
+int DMO_Filter_GetProperty (DMO_Filter * This, const WCHAR * name,
+                            VARIANT * value, char ** error_message)
+{
+  HRESULT hr = 0;
+  char * local_error = NULL;
+  
+  if (!This || !This->m_pPropertyBag || !This->m_pPropertyBag->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p or this " \
+              "DMO does not support the IPropertyBag interface", This);
+    goto beach;
+  }
+  
+  hr = This->m_pPropertyBag->vt->Read (This->m_pPropertyBag,
+                                       (LPCOLESTR) name, value, NULL);
+  if (hr != S_OK) {
+    asprintf (&local_error, "unexpected error when trying to get property " \
+              "named %ls: 0x%lx", name, hr);
+    goto beach;
+  }
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE;    
 }
 
 DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID* id,
@@ -575,6 +591,8 @@ DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID* id,
     
     r = object->vt->QueryInterface (object, &IID_IWMCodecPrivateData,
                                     (void **) &This->m_pPrivateData);
+    r = object->vt->QueryInterface (object, &IID_IPropertyBag,
+                                    (void **) &This->m_pPropertyBag);
   }
   
   object->vt->Release ((IUnknown *) object);

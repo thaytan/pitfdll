@@ -14,7 +14,8 @@ int DMO_AudioEncoder_GetInputInfos (DMO_AudioEncoder * this,
 
 DMO_AudioEncoder * DMO_AudioEncoder_Open (char * dllname, GUID * guid,
                                           WAVEFORMATEX * target_format,
-                                          WAVEFORMATEX ** format);
+                                          WAVEFORMATEX ** format,
+                                          unsigned int vbr);
 
 void DMO_AudioEncoder_Destroy (DMO_AudioEncoder * this);
 

@@ -114,6 +114,7 @@ int DMO_VideoEncoder_GetInputInfos (DMO_VideoEncoder * this,
 DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
                                           BITMAPINFOHEADER * format,
                                           unsigned int dest_fourcc,
+                                          unsigned int vbr,
                                           unsigned long bitrate,
                                           float framerate,
                                           char ** data,
@@ -123,7 +124,8 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   HRESULT result;
   ct * c;
   char * error_message = NULL;
-                        
+  VARIANT varg;
+  
   this = malloc (sizeof (DMO_VideoEncoder));
   if (!this)
     return NULL;
@@ -198,7 +200,10 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   
   this->m_sVhdr2->rcSource = this->m_sVhdr->rcSource;
   this->m_sVhdr2->rcTarget = this->m_sVhdr->rcTarget;
-  this->m_sVhdr2->dwBitRate = bitrate;
+  if (vbr)
+    this->m_sVhdr2->dwBitRate = 128016; /* FIXME */
+  else
+    this->m_sVhdr2->dwBitRate = bitrate;
   this->m_sVhdr2->dwBitErrorRate = 0;
   this->m_sVhdr2->AvgTimePerFrame = 10000000 / framerate;
   
@@ -214,13 +219,40 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   this->m_sDestType.pbFormat = (char *) this->m_sVhdr2;
   this->m_sDestType.pUnk = NULL;
   
-  print_video_header (this->m_sVhdr);
+  /* print_video_header (this->m_sVhdr); */
  
   /* Creating DMO Filter */
   this->m_pDMO_Filter = DMO_Filter_Create (dllname, guid, &this->inputs,
                                            &this->outputs, &error_message);
   if (!this->m_pDMO_Filter)
     goto beach;
+  
+  if (vbr) { /* VBR 1 pass */
+    varg.n1.n2.vt = VT_BOOL;
+    varg.n1.n2.n3.boolVal = TRUE;
+  
+    if (!DMO_Filter_SetProperty (this->m_pDMO_Filter,
+                                 (const WCHAR *) g_wszWMVCVBREnabled, &varg,
+                                 &error_message))
+      goto beach;
+  
+    varg.n1.n2.vt = VT_I4;
+    varg.n1.n2.n3.lVal = 1;
+  
+    if (!DMO_Filter_SetProperty (this->m_pDMO_Filter,
+                                 (const WCHAR *) g_wszWMVCPassesUsed, &varg,
+                                 &error_message))
+      goto beach;
+    
+    /* Setting Quality */
+    varg.n1.n2.vt = VT_I4;
+    varg.n1.n2.n3.lVal = bitrate;
+    
+    if (!DMO_Filter_SetProperty (this->m_pDMO_Filter,
+                                 (const WCHAR *) g_wszWMVCVBRQuality, &varg,
+                                 &error_message))
+      goto beach;
+  }
   
   /* Input first and then output as we are an encoder */
   if (!DMO_Filter_SetInputType (this->m_pDMO_Filter, 0, &this->m_sOurType,
@@ -243,8 +275,8 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
             *data_length);
   }
   
-  print_video_header (this->m_sVhdr2);
-  
+  /* print_video_header (this->m_sVhdr2); */
+    
   /* Now use that data in dest type and set the output type definitely */
   if (!DMO_Filter_SetOutputType (this->m_pDMO_Filter, 0, &this->m_sDestType,
                                  &error_message))

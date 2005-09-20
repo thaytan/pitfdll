@@ -11,5 +11,6 @@ extern const GUID IID_IDMOQualityControl;
 extern const GUID IID_IDMOVideoOutputOptimizations;
 extern const GUID IID_IPropertyBag;
 extern const GUID IID_IWMCodecPrivateData;
+extern const GUID IID_IPropertyBag;
 
 #endif

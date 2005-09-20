@@ -45,7 +45,8 @@ typedef struct _CodecEntry {
   gchar *friendly_name;
 
   /* gst */
-  gchar *caps;
+  gchar *sinkcaps;
+  gchar *srccaps;
 } CodecEntry;
 
 #endif /* __GENERAL_H__ */

@@ -79,10 +79,12 @@ int DMO_AudioEncoder_GetInputInfos (DMO_AudioEncoder * this,
 
 DMO_AudioEncoder * DMO_AudioEncoder_Open (char * dllname, GUID * guid,
                                           WAVEFORMATEX * target_format,
-                                          WAVEFORMATEX ** format)
+                                          WAVEFORMATEX ** format,
+                                          unsigned int vbr)
 {
   DMO_AudioEncoder * this = NULL;
   char * error_message = NULL;
+  VARIANT varg;
   
 #ifdef LDT_paranoia
   Setup_LDT_Keeper();
@@ -94,7 +96,7 @@ DMO_AudioEncoder * DMO_AudioEncoder_Open (char * dllname, GUID * guid,
     return NULL;
   memset (this, 0, sizeof (DMO_AudioEncoder));
   
-  print_wave_header (target_format);
+  /* print_wave_header (target_format); */
     
   /* Defining incoming type, raw audio samples */
   this->m_sAhdr = (WAVEFORMATEX *) malloc (sizeof (WAVEFORMATEX));
@@ -128,38 +130,62 @@ DMO_AudioEncoder * DMO_AudioEncoder_Open (char * dllname, GUID * guid,
   if (!this->m_pDMO_Filter)
     goto beach;
   
+  if (vbr) { /* VBR 1 pass */
+    varg.n1.n2.vt = VT_BOOL;
+    varg.n1.n2.n3.boolVal = TRUE;
+  
+    if (!DMO_Filter_SetProperty (this->m_pDMO_Filter,
+                                 (const WCHAR *) g_wszWMVCVBREnabled, &varg,
+                                 &error_message))
+      goto beach;
+  
+    varg.n1.n2.vt = VT_I4;
+    varg.n1.n2.n3.lVal = 1;
+  
+    if (!DMO_Filter_SetProperty (this->m_pDMO_Filter,
+                                 (const WCHAR *) g_wszWMVCPassesUsed, &varg,
+                                 &error_message))
+      goto beach;
+  }
+  
   /* Getting the WAVEFORMATEX structure from the output pin matching with our
      target format */
   if (!DMO_Filter_LookupAudioEncoderType (this->m_pDMO_Filter, target_format,
-                                          &this->m_sAhdr2, &error_message))
+                                          &this->m_sDestType, vbr,
+                                          &error_message))
     goto beach;
 
-  /* Defining outcoming type, encoded audio samples */
-  memset (&this->m_sDestType, 0, sizeof (this->m_sDestType));
-  
-  this->m_sDestType.majortype = MEDIATYPE_Audio;
-  this->m_sDestType.subtype = MEDIASUBTYPE_PCM;
-  this->m_sDestType.subtype.f1 = target_format->wFormatTag;
-  this->m_sDestType.formattype = FORMAT_WaveFormatEx;
-  this->m_sDestType.lSampleSize = 0;
-  this->m_sDestType.bFixedSizeSamples = 1;
-  this->m_sDestType.bTemporalCompression = 0;
-  this->m_sDestType.cbFormat = sizeof (WAVEFORMATEX) + this->m_sAhdr2->cbSize;
-  this->m_sDestType.pbFormat = (char *) this->m_sAhdr2;
-  
-  print_wave_header (this->m_sAhdr);
-  print_wave_header (this->m_sAhdr2);
+  this->m_sAhdr2 = (WAVEFORMATEX *) this->m_sDestType.pbFormat;
   
   if (format) {
     *format = this->m_sAhdr2;
   }
   
+  /* print_wave_header (this->m_sAhdr);
+     print_wave_header (this->m_sAhdr2); */
+  
+  /* Output then Input */
   if (!DMO_Filter_SetOutputType (this->m_pDMO_Filter, 0, &this->m_sDestType,
                                  &error_message))
     goto beach;
   if (!DMO_Filter_SetInputType (this->m_pDMO_Filter, 0, &this->m_sOurType,
                                 &error_message))
     goto beach;
+  
+  if (vbr) {
+    varg.n1.n2.vt = VT_EMPTY;
+  
+    if (!DMO_Filter_GetProperty (this->m_pDMO_Filter,
+                                 (const WCHAR *) g_wszWMACAvgBytesPerSec, &varg,
+                                 &error_message))
+      goto beach;
+  
+    if (varg.n1.n2.vt != VT_I4)
+      goto beach;
+    
+    /* We get the average bitrate from the encoder to update the output format */
+    this->m_sAhdr2->nAvgBytesPerSec = varg.n1.n2.n3.lVal;
+  }  
   
   /* Getting informations about buffers */
   if (!DMO_Filter_GetOutputSizeInfo (this->m_pDMO_Filter, 0,
@@ -185,7 +211,6 @@ beach:
     free (error_message);
   }
   free(this->m_sAhdr);
-  free(this->m_sAhdr2);
   free(this);
   return NULL;
 
@@ -200,10 +225,6 @@ void DMO_AudioEncoder_Destroy(DMO_AudioEncoder * this)
     free(this->m_sAhdr);
     this->m_sAhdr = NULL;
   }
-  if (this->m_sAhdr2) {
-    free(this->m_sAhdr2);
-    this->m_sAhdr2 = NULL;
-  }
   if (this->m_pDMO_Filter) {
     DMO_Filter_Destroy (this->m_pDMO_Filter);
     this->m_pDMO_Filter = NULL;
@@ -217,8 +238,8 @@ int DMO_AudioEncoder_ProcessInput (DMO_AudioEncoder * this,
                                    unsigned int * size_read)
 {
   CMediaBuffer * bufferin = NULL;
-  unsigned long read = 0;
-  int r = 0;
+  unsigned long read = 0, status = 0;
+  HRESULT hr = 0;
   
   if (!in_data)
 	  return -1;
@@ -226,6 +247,15 @@ int DMO_AudioEncoder_ProcessInput (DMO_AudioEncoder * this,
 #ifdef LDT_paranoia
     Setup_FS_Segment ();
 #endif
+  
+  hr = this->m_pDMO_Filter->m_pMedia->vt->GetInputStatus (
+         this->m_pDMO_Filter->m_pMedia, 0, &status);
+  
+  if (hr != S_OK)
+    return FALSE;
+    
+  if (!(status & DMO_INPUT_STATUSF_ACCEPT_DATA))
+   return FALSE;
   
   /* REFERENCETIME is in 100 nanoseconds */
   timestamp /= 100;
@@ -235,7 +265,7 @@ int DMO_AudioEncoder_ProcessInput (DMO_AudioEncoder * this,
   bufferin = CMediaBufferCreate (in_size, (void *) in_data, in_size, 1);
   
   if (duration) {
-    r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
+    hr = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
         this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
 				DMO_INPUT_DATA_BUFFERF_TIME |
         DMO_INPUT_DATA_BUFFERF_TIMELENGTH |
@@ -243,7 +273,7 @@ int DMO_AudioEncoder_ProcessInput (DMO_AudioEncoder * this,
         timestamp, duration);
   }
   else {
-    r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
+    hr = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
           this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
 				  DMO_INPUT_DATA_BUFFERF_SYNCPOINT, 0, 0);
   }
@@ -256,7 +286,7 @@ int DMO_AudioEncoder_ProcessInput (DMO_AudioEncoder * this,
   if (size_read)
 	  *size_read = read;
   
-  if (r == S_OK || (unsigned) r == DMO_E_NOTACCEPTING) {
+  if (hr == S_OK || (unsigned) hr == DMO_E_NOTACCEPTING) {
     /* Output data waiting for us to process it, so we won't accept more. */
     return FALSE;
   }
@@ -274,7 +304,7 @@ int DMO_AudioEncoder_ProcessOutput (DMO_AudioEncoder * this,
 {
   DMO_OUTPUT_DATA_BUFFER * db = NULL;
   unsigned long written = 0, status = 0, index;
-  int r = 0;
+  HRESULT hr = 0;
   
   if (!out_data)
 	  return -1;
@@ -282,6 +312,8 @@ int DMO_AudioEncoder_ProcessOutput (DMO_AudioEncoder * this,
 #ifdef LDT_paranoia
     Setup_FS_Segment ();
 #endif
+  
+  this->outputs = 1;
   
   db = malloc (sizeof (DMO_OUTPUT_DATA_BUFFER) * this->outputs);
   if (!db)
@@ -298,13 +330,11 @@ int DMO_AudioEncoder_ProcessOutput (DMO_AudioEncoder * this,
       db[index].pBuffer = NULL;
   }
   
-	r = this->m_pDMO_Filter->m_pMedia->vt->ProcessOutput (
+	hr = this->m_pDMO_Filter->m_pMedia->vt->ProcessOutput (
                                      this->m_pDMO_Filter->m_pMedia,
                                      DMO_PROCESS_OUTPUT_DISCARD_WHEN_NO_BUFFER,
                                      this->outputs, db, &status);
     
-  printf ("dwStatus 0 is %d r is %d 0x%X\n", db[0].dwStatus, r, r);
-  
 	((IMediaBuffer *) db[0].pBuffer)->vt->GetBufferAndLength (
                                        (IMediaBuffer *) db[0].pBuffer, NULL,
                                        &written);
@@ -322,7 +352,6 @@ int DMO_AudioEncoder_ProcessOutput (DMO_AudioEncoder * this,
   }
   
   if ((db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE) != 0) {
-    printf ("I have more data to output\n");
     free (db);
     return TRUE;
   }

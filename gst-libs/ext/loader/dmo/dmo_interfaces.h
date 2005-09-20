@@ -2,6 +2,7 @@
 #define DMO_INTERFACE_H
 
 #include "dmo.h"
+#include "variant.h"
 
 /*
  * IMediaBuffer interface
@@ -30,9 +31,9 @@ typedef struct _DMO_OUTPUT_DATA_BUFFER
     REFERENCE_TIME rtTimelength;
 } DMO_OUTPUT_DATA_BUFFER;
 
-
 /*
  * IPropertyBag interface
+ */
 
 typedef struct _IPropertyBag IPropertyBag;
 typedef struct IPropertyBag_vt
@@ -40,15 +41,15 @@ typedef struct IPropertyBag_vt
     INHERIT_IUNKNOWN();
   
     HRESULT STDCALL ( *Read )(IPropertyBag * This,
-           [in]  LPCOLESTR pszPropName,
-           [out][in]  VARIANT *pVar,
-           [in] IErrorLog *pErrorLog);
+           /* [in] */      LPCOLESTR pszPropName,
+           /* [out][in] */ VARIANT *pVar,
+           /* [in] */      void *pErrorLog);
         
     HRESULT STDCALL ( *Write )(IPropertyBag * This,
-           [in]  LPCOLESTR pszPropName,
-           [in]  VARIANT *pVar);
+           /* [in] */  LPCOLESTR pszPropName,
+           /* [in] */  VARIANT *pVar);
 } IPropertyBag_vt;
-struct _IPropertyBag { IPropertyBag_vt* vt; }; */
+struct _IPropertyBag { IPropertyBag_vt* vt; };
 
 
 /*

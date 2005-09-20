@@ -3860,6 +3860,7 @@ typedef struct __attribute__((__packed__))
 } MY_MEDIA_TYPE;
 static HRESULT WINAPI expMoCopyMediaType(MY_MEDIA_TYPE* dest, const MY_MEDIA_TYPE* src)
 {
+    dbgprintf("MoCopyMediaType(%p, %p)\n", dest, src);
     if (!dest || !src)
 	return E_POINTER;
     memcpy(dest, src, sizeof(MY_MEDIA_TYPE));
@@ -3874,26 +3875,29 @@ static HRESULT WINAPI expMoCopyMediaType(MY_MEDIA_TYPE* dest, const MY_MEDIA_TYP
 }
 static HRESULT WINAPI expMoInitMediaType(MY_MEDIA_TYPE* dest, DWORD cbFormat)
 {
+    dbgprintf("MoInitMediaType(%p, %ld)\n", dest, cbFormat);
     if (!dest)
         return E_POINTER;
-    memset(dest, 0, sizeof(MY_MEDIA_TYPE));
-    if (cbFormat)
+    if (cbFormat > 0)
     {
 	dest->pbFormat = (char*) my_mreq(cbFormat, 0);
 	if (!dest->pbFormat)
             return E_OUTOFMEMORY;
+	dest->cbFormat = cbFormat;
     }
     return S_OK;
 }
 static HRESULT WINAPI expMoCreateMediaType(MY_MEDIA_TYPE** dest, DWORD cbFormat)
 {
+    dbgprintf("MoCreateMediaType(%p, %ld)\n", dest, cbFormat);
     if (!dest)
 	return E_POINTER;
     *dest = my_mreq(sizeof(MY_MEDIA_TYPE), 0);
     return expMoInitMediaType(*dest, cbFormat);
 }
-static HRESULT WINAPI expMoDuplicateMediaType(MY_MEDIA_TYPE** dest, const void* src)
+static HRESULT WINAPI expMoDuplicateMediaType(MY_MEDIA_TYPE** dest, const MY_MEDIA_TYPE* src)
 {
+    dbgprintf("MoDuplicateMediaType(%p, %p)\n", dest, src);
     if (!dest)
 	return E_POINTER;
     *dest = my_mreq(sizeof(MY_MEDIA_TYPE), 0);
@@ -3901,6 +3905,7 @@ static HRESULT WINAPI expMoDuplicateMediaType(MY_MEDIA_TYPE** dest, const void* 
 }
 static HRESULT WINAPI expMoFreeMediaType(MY_MEDIA_TYPE* dest)
 {
+    dbgprintf("MoFreeMediaType(%p)\n", dest);
     if (!dest)
 	return E_POINTER;
     if (dest->pbFormat)
@@ -3913,6 +3918,7 @@ static HRESULT WINAPI expMoFreeMediaType(MY_MEDIA_TYPE* dest)
 }
 static HRESULT WINAPI expMoDeleteMediaType(MY_MEDIA_TYPE* dest)
 {
+    dbgprintf("MoDeleteMediaType(%p)\n", dest);
     if (!dest)
 	return E_POINTER;
     expMoFreeMediaType(dest);
@@ -4005,9 +4011,19 @@ static int expsscanf(const char* str, const char* format, ...)
 }
 static void* expfopen(const char* path, const char* mode)
 {
-    printf("fopen: \"%s\"  mode:%s\n", path, mode);
+    dbgprintf("fopen: \"%s\"  mode:%s\n", path, mode);
     //return fopen(path, mode);
     return fdopen(0, mode); // everything on screen
+}
+static int expfflush(void* stream)
+{
+    dbgprintf("fflush(%p)\n", stream);
+    return 0 /*fflush((FILE *) stream)*/;
+}
+static int expfclose(void* stream)
+{
+    dbgprintf("fclose(%p)\n", stream);
+    return 0 /*fclose((FILE *) stream)*/;
 }
 static int expfprintf(void* stream, const char* format, ...)
 {
@@ -4032,7 +4048,11 @@ static int expprintf(const char* format, ...)
     va_end(args);
     return r;
 }
-
+static int expremove(const char* pathname)
+{
+    dbgprintf("remove(%s)\n", pathname);
+    return 0;
+}
 static char* expgetenv(const char* varname)
 {
     char* v = getenv(varname);
@@ -4077,6 +4097,26 @@ static char* expstrcpy(char* str1, const char* str2)
 {
     char* result= strcpy(str1, str2);
     dbgprintf("strcpy(0x%x, 0x%x='%s') => %p\n", str1, str2, str2, result);
+    return result;
+}
+static size_t expwcslen (const WCHAR* str)
+{
+    size_t size = 0;
+    WCHAR c = str[size];
+    while (c) {
+        size++;
+	c = str[size];
+    }
+    return size;
+}
+static WCHAR* expwcscat(WCHAR* dest, const WCHAR* src)
+{
+    printf("wcscat called !\n");
+}
+static int expwcscmp(const WCHAR* str1, const WCHAR* str2)
+{
+    int result=memcmp (str1, str2, expwcslen(str1));
+    dbgprintf("wcscmp(0x%x='%ls', 0x%x='%ls') => %d\n", str1, str1, str2, str2, result);
     return result;
 }
 static int expstrcmp(const char* str1, const char* str2)
@@ -4130,19 +4170,19 @@ static int expisdigit(int c)
     dbgprintf("isdigit(0x%x='%c' => %d\n", c, c, result);
     return result;
 }
-static void* expmemmove(void* dest, void* src, int n)
+static void* expmemmove(void* dest, const void* src, size_t n)
 {
     void* result = memmove(dest, src, n);
     dbgprintf("memmove(0x%x, 0x%x, %d) => %p\n", dest, src, n, result);
     return result;
 }
-static int expmemcmp(void* dest, void* src, int n)
+static int expmemcmp(const void* dest, const void* src, size_t n)
 {
     int result = memcmp(dest, src, n);
     dbgprintf("memcmp(0x%x, 0x%x, %d) => %d\n", dest, src, n, result);
     return result;
 }
-static void* expmemcpy(void* dest, void* src, int n)
+static void* expmemcpy(void* dest, const void* src, size_t n)
 {
     void *result = memcpy(dest, src, n);
     dbgprintf("memcpy(0x%x, 0x%x, %d) => %p\n", dest, src, n, result);
@@ -4496,7 +4536,6 @@ static void WINAPI expVariantInit(void* p)
     printf("InitCommonControls called!\n");
     return;
 }
-
 int expRegisterClassA(const void/*WNDCLASSA*/ *wc)
 {
     dbgprintf("RegisterClassA(%p) => random id\n", wc);
@@ -4823,6 +4862,9 @@ struct exports exp_msvcrt[]={
     FF(strlen, -1)
     FF(strcpy, -1)
     FF(wcscpy, -1)
+    FF(wcscat, -1)
+    FF(wcslen, -1)
+    FF(wcscmp, -1)
     FF(strcmp, -1)
     FF(strncmp, -1)
     FF(strcat, -1)
@@ -4852,8 +4894,11 @@ struct exports exp_msvcrt[]={
     FF(sprintf,-1)
     FF(sscanf,-1)
     FF(fopen,-1)
+    FF(fclose,-1)
+    FF(fflush,-1)
     FF(fprintf,-1)
     FF(printf,-1)
+    FF(remove,-1)
     FF(getenv,-1)
     FF(floor,-1)
     FF(_EH_prolog,-1)
@@ -5161,8 +5206,6 @@ void* LookupExternal(const char* library, int ordinal)
     }
     //    printf("%x %x\n", &unk_exp1, &unk_exp2);
 
-    printf("External func %s:%d\n", library, ordinal);
-
     for(i=0; i<sizeof(libraries)/sizeof(struct libs); i++)
     {
 	if(strcasecmp(library, libraries[i].name))
@@ -5171,7 +5214,7 @@ void* LookupExternal(const char* library, int ordinal)
 	{
 	    if(ordinal!=libraries[i].exps[j].id)
 		continue;
-	    //printf("Hit: 0x%p\n", libraries[i].exps[j].func);
+	    /* printf("Hit: 0x%p\n", libraries[i].exps[j].func); */
 	    return libraries[i].exps[j].func;
 	}
     }
@@ -5200,8 +5243,7 @@ void* LookupExternal(const char* library, int ordinal)
 	    goto no_dll;
 	}
 
-	printf("External dll loaded (offset: 0x%x, func: %p)\n",
-	       hand, func);
+	dbgprintf("External dll loaded (offset: 0x%x, func: %p)\n", hand, func);
 	return func;
     }
 
@@ -5245,6 +5287,7 @@ void* LookupExternalByName(const char* library, const char* name)
 /* xine: pos is now tested inside add_stub()
     if(pos>150)return 0;// to many symbols
 */
+    dbgprintf("function %s not found!\n", name);
     strcpy(export_names[pos], name);
     return add_stub();
 }

@@ -79,7 +79,7 @@ dshow_videodec_base_init (DSVideoDecClass * klass)
   g_free (details.longname);
 
   /* sink caps */
-  sinkcaps = gst_caps_from_string (tmp->caps);
+  sinkcaps = gst_caps_from_string (tmp->sinkcaps);
   gst_caps_set_simple (sinkcaps,
       "width", GST_TYPE_INT_RANGE, 16, 4096,
       "height", GST_TYPE_INT_RANGE, 16, 4096,
@@ -87,7 +87,12 @@ dshow_videodec_base_init (DSVideoDecClass * klass)
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
 
   /* source, simple */
-  srccaps = gst_caps_from_string ("video/x-raw-rgb; video/x-raw-yuv");
+  if (tmp->srccaps) {
+    srccaps = gst_caps_from_string (tmp->srccaps);
+  }
+  else {
+    srccaps = gst_caps_from_string ("video/x-raw-rgb; video/x-raw-yuv");
+  }
   src = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, srccaps);
 
   /* register */
@@ -272,7 +277,8 @@ static const CodecEntry codecs[] = {
   { "ir50_32", { 0x30355649, 0x0000, 0x0010,
 		 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 },
     GST_MAKE_FOURCC ('I', 'V', '5', '0'), 5, "Indeo Video",
-    "video/x-intel, ivversion=(int)5" },
+    "video/x-intel, ivversion=(int)5",
+    NULL },
   { NULL }
 };
 

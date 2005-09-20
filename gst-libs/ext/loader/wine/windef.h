@@ -177,6 +177,21 @@ typedef double          DOUBLE;
 typedef long long       LONGLONG;
 typedef unsigned long long   ULONGLONG;
 
+/* SAFEARRAY */
+typedef struct tagSAFEARRAYBOUND {
+    unsigned long cElements;
+    long lLbound;
+} SAFEARRAYBOUND;
+
+typedef struct tagSAFEARRAY {
+    unsigned short cDims;
+    unsigned short fFeatures;
+    unsigned long cbElements;
+    unsigned long cLocks;
+    void *pvData;
+    SAFEARRAYBOUND rgsabound[1];
+} SAFEARRAY;
+
 /* FIXME: Wine does not compile with strict on, therefore strict
  * handles are presently only usable on machines where sizeof(UINT) ==
  * sizeof(void*).  HANDLEs are supposed to be void* but a large amount

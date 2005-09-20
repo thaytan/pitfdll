@@ -87,7 +87,7 @@ dmo_videodec_base_init (DMOVideoDecClass * klass)
   g_free (details.longname);
 
   /* sink caps */
-  sinkcaps = gst_caps_from_string (tmp->caps);
+  sinkcaps = gst_caps_from_string (tmp->sinkcaps);
   gst_caps_set_simple (sinkcaps,
       "width", GST_TYPE_INT_RANGE, 16, 4096,
       "height", GST_TYPE_INT_RANGE, 16, 4096,
@@ -95,7 +95,12 @@ dmo_videodec_base_init (DMOVideoDecClass * klass)
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
 
   /* source, simple */
-  srccaps = gst_caps_from_string ("video/x-raw-yuv, format=(fourcc)YUY2");
+  if (tmp->srccaps) {
+    srccaps = gst_caps_from_string (tmp->srccaps);
+  }
+  else {
+    srccaps = gst_caps_from_string ("video/x-raw-yuv, format=(fourcc)YUY2");
+  }
   src = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, srccaps);
 
   /* register */
@@ -208,11 +213,11 @@ dmo_videodec_link (GstPad * pad, const GstCaps * caps)
                                   &dec->in_align, &dec->lookahead);
 
   /* negotiate output */
-  out = gst_caps_new_simple ("video/x-raw-yuv",
+  out = gst_caps_from_string (klass->entry->srccaps);
+  gst_caps_set_simple (out,
       "width", G_TYPE_INT, dec->w,
       "height", G_TYPE_INT, dec->h,
-      "framerate", G_TYPE_DOUBLE, dec->fps,
-      "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC ('Y','U','Y','2'), NULL);
+      "framerate", G_TYPE_DOUBLE, dec->fps, NULL);
   if (!gst_pad_set_explicit_caps (dec->srcpad, out)) {
     gst_caps_free (out);
     GST_ERROR ("Failed to negotiate output");
@@ -324,19 +329,23 @@ static const CodecEntry codecs[] = {
   { "wmv9dmod", { 0x724bb6a4, 0xe526, 0x450f,
 		  0xaf, 0xfa, 0xab, 0x9b, 0x45, 0x12, 0x91, 0x11 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '3'), 3, "Windows Media Video",
-    "video/x-wmv, wmvversion=(int)3" },
+    "video/x-wmv, wmvversion=(int)3",
+    "video/x-raw-yuv, format= (fourcc) YUY2" },
   { "wmvdmod", { 0x82d353df, 0x90bd, 0x4382,
 		 0x8b, 0xc2, 0x3f, 0x61, 0x92, 0xb7, 0x6e, 0x34 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '1'), 1, "Windows Media Video",
-    "video/x-wmv, wmvversion = (int) 1" },
+    "video/x-wmv, wmvversion = (int) 1",
+    "video/x-raw-yuv, format= (fourcc) YUY2" },
   { "wmvdmod", { 0x82d353df, 0x90bd, 0x4382,
 		 0x8b, 0xc2, 0x3f, 0x61, 0x92, 0xb7, 0x6e, 0x34 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '2'), 2, "Windows Media Video",
-    "video/x-wmv, wmvversion = (int) 2" },
+    "video/x-wmv, wmvversion = (int) 2",
+    "video/x-raw-yuv, format= (fourcc) YUY2" },
   { "wmvdmod", { 0x82d353df, 0x90bd, 0x4382,
 		 0x8b, 0xc2, 0x3f, 0x61, 0x92, 0xb7, 0x6e, 0x34 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '3'), 3, "Windows Media Video",
-    "video/x-wmv, wmvversion = (int) 3" },
+    "video/x-wmv, wmvversion = (int) 3",
+    "video/x-raw-yuv, format= (fourcc) YUY2" },
   { NULL }
 };
 

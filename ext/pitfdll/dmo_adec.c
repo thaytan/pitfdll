@@ -91,7 +91,7 @@ dmo_audiodec_base_init (DMOAudioDecClass * klass)
   g_free (details.longname);
 
   /* sink caps */
-  sinkcaps = gst_caps_from_string (tmp->caps);
+  sinkcaps = gst_caps_from_string (tmp->sinkcaps);
   gst_caps_set_simple (sinkcaps,
       "block_align", GST_TYPE_INT_RANGE, 0, G_MAXINT,
       "bitrate", GST_TYPE_INT_RANGE, 0, G_MAXINT,
@@ -99,11 +99,16 @@ dmo_audiodec_base_init (DMOAudioDecClass * klass)
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
 
   /* source, simple */
-  srccaps = gst_caps_from_string ("audio/x-raw-int, " \
-                                  "width = (int) { 1, 8, 16, 24, 32 }, " \
-                                  "depth = (int) { 1, 8, 16, 24, 32 }, " \
-                                  "signed = (boolean) true, " \
-                                  "endianness = (int) 1234");
+  if (tmp->srccaps) {
+    srccaps = gst_caps_from_string (tmp->srccaps);
+  }
+  else {
+    srccaps = gst_caps_from_string ("audio/x-raw-int, " \
+                                    "width = (int) { 1, 8, 16, 24, 32 }, " \
+                                    "depth = (int) { 1, 8, 16, 24, 32 }, " \
+                                    "signed = (boolean) true, " \
+                                    "endianness = (int) 1234");
+  }
   src = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, srccaps);
 
   /* register */
@@ -218,12 +223,11 @@ dmo_audiodec_link (GstPad * pad, const GstCaps * caps)
                                   &dec->in_align, &dec->lookahead);
   
   /* negotiate output */
-  out = gst_caps_new_simple ("audio/x-raw-int",
+  out = gst_caps_from_string (klass->entry->srccaps);
+  gst_caps_set_simple (out,
       "width", G_TYPE_INT, dec->depth,
       "depth", G_TYPE_INT, dec->depth,
-      "signed", G_TYPE_BOOLEAN, TRUE,
       "rate", G_TYPE_INT, dec->rate,
-      "endianness", G_TYPE_INT, 1234,
       "channels", G_TYPE_INT, dec->channels,
       NULL);
   if (dec->channels > 2 && dec->channels <= 11) {
@@ -351,19 +355,31 @@ static const CodecEntry codecs[] = {
   { "wmadmod", { 0x2eeb4adf, 0x4578, 0x4d10,
 		  0xbc, 0xa7, 0xbb, 0x95, 0x5f, 0x56, 0x32, 0x0a },
     0x00000160, 1, "Windows Media Audio",
-    "audio/x-wma, wmaversion = (int) 1" },
+    "audio/x-wma, wmaversion = (int) 1",
+    "audio/x-raw-int, " \
+    "width = (int) { 1, 8, 16 }, depth = (int) { 1, 8, 16 }, " \
+    "signed = (boolean) true, endianness = (int) 1234" },
   { "wmadmod", { 0x2eeb4adf, 0x4578, 0x4d10,
 		  0xbc, 0xa7, 0xbb, 0x95, 0x5f, 0x56, 0x32, 0x0a },
     0x00000161, 2, "Windows Media Audio",
-    "audio/x-wma, wmaversion = (int) 2" },
+    "audio/x-wma, wmaversion = (int) 2",
+    "audio/x-raw-int, " \
+    "width = (int) { 1, 8, 16 }, depth = (int) { 1, 8, 16 }, " \
+    "signed = (boolean) true, endianness = (int) 1234" },
   { "wmadmod", { 0x2eeb4adf, 0x4578, 0x4d10,
 		  0xbc, 0xa7, 0xbb, 0x95, 0x5f, 0x56, 0x32, 0x0a },
     0x00000162, 3, "Windows Media Audio",
-    "audio/x-wma, wmaversion = (int) 3" },
+    "audio/x-wma, wmaversion = (int) 3",
+    "audio/x-raw-int, " \
+    "width = (int) 24, depth = (int) 24, " \
+    "signed = (boolean) true, endianness = (int) 1234" },
   { "wmspdmod", { 0x874131CB, 0x4ecc, 0x443b,
 		  0x89, 0x48, 0x74, 0x6b, 0x89, 0x59, 0x5d, 0x20 },
     0x0000000a, 1, "Windows Media Speech",
-    "audio/x-wmsp" },
+    "audio/x-wmsp",
+    "audio/x-raw-int, " \
+    "width = (int) 16, depth = (int) 16, " \
+    "signed = (boolean) true, endianness = (int) 1234" },
   { NULL }
 };
 

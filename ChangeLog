@@ -1,3 +1,53 @@
+2005-09-20  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_base_init),
+	(dmo_audiodec_link):
+	* ext/pitfdll/dmo_aenc.c: (dmo_audioenc_base_init),
+	(dmo_audioenc_class_init), (dmo_audioenc_init),
+	(dmo_audioenc_get_property), (dmo_audioenc_set_property),
+	(dmo_audioenc_link):
+	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_base_init),
+	(dmo_videodec_link):
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_base_init),
+	(dmo_videoenc_class_init), (dmo_videoenc_init),
+	(dmo_videoenc_get_property), (dmo_videoenc_set_property),
+	(dmo_videoenc_link):
+	* ext/pitfdll/dshow_vdec.c: (dshow_videodec_base_init):
+	* ext/pitfdll/general.h:
+	* gst-libs/ext/loader/dmo/DMO_AudioDecoder.c:
+	(DMO_AudioDecoder_Open):
+	* gst-libs/ext/loader/dmo/DMO_AudioEncoder.c:
+	(DMO_AudioEncoder_Open), (DMO_AudioEncoder_Destroy),
+	(DMO_AudioEncoder_ProcessInput), (DMO_AudioEncoder_ProcessOutput):
+	* gst-libs/ext/loader/dmo/DMO_AudioEncoder.h:
+	* gst-libs/ext/loader/dmo/DMO_Filter.h:
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.c:
+	(DMO_VideoEncoder_Open):
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.h:
+	* gst-libs/ext/loader/dmo/Makefile.am:
+	* gst-libs/ext/loader/dmo/dmo.c: (print_wave_header),
+	(DMO_Filter_Destroy), (DMO_Filter_LookupAudioEncoderType),
+	(DMO_Filter_SetPartialOutputType), (DMO_Filter_SetProperty),
+	(DMO_Filter_GetProperty), (DMO_Filter_Create):
+	* gst-libs/ext/loader/dmo/dmo.h:
+	* gst-libs/ext/loader/dmo/dmo_guids.h:
+	* gst-libs/ext/loader/dmo/dmo_interfaces.h:
+	* gst-libs/ext/loader/wine/win32.c: (expMoCopyMediaType),
+	(expMoInitMediaType), (expMoCreateMediaType),
+	(expMoDuplicateMediaType), (expMoFreeMediaType),
+	(expMoDeleteMediaType), (expfopen), (expfflush), (expfclose),
+	(expremove), (expwcslen), (expwcscat), (expwcscmp), (expmemmove),
+	(expmemcmp), (expmemcpy), (expVariantInit), (LookupExternal),
+	(LookupExternalByName):
+	* gst-libs/ext/loader/wine/windef.h: Well i've been fighting with
+	those things for the past weeks i'm going to back off for a moment.
+	The decoders work pretty well except for WMA3 which outputs strange
+	clicks, encoding in WMV works really well too. I've implemented VBR
+	encoding with quality properties for both audio and video, video has
+	some weird green frames when using VBR and audio still doesn't work. I
+	have the feeling the issue with audio encoding is very deep in the
+	wrapping process and i can't find how to fix it. :-(
+
 2005-09-04  Julien MOUTTE  <julien@moutte.net>
 
 	* gst-libs/ext/loader/dmo/DMO_AudioEncoder.h: Forgot this one.
