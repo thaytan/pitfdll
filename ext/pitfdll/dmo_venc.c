@@ -41,6 +41,8 @@ typedef struct _DMOVideoEnc {
   gint quality;
   gint bitrate;
   gdouble fps;
+
+  GstClockTime current_ts;
   
   void *ctx;
   gulong out_buffer_size;
@@ -55,9 +57,11 @@ typedef struct _DMOVideoEncClass {
 } DMOVideoEncClass;
 
 static void dmo_videoenc_dispose (GObject * obj);
-static GstPadLinkReturn dmo_videoenc_link (GstPad * pad, const GstCaps * caps);
-static void dmo_videoenc_chain (GstPad * pad, GstData * data);
-static GstElementStateReturn dmo_videoenc_change_state (GstElement * element);
+static GstFlowReturn dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer);
+static gboolean dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps);
+static gboolean dmo_videoenc_sink_event (GstPad * pad, GstEvent * event);
+static GstStateChangeReturn dmo_videoenc_change_state (GstElement * element,
+    GstStateChange transition);
 static void dmo_videoenc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static void dmo_videoenc_set_property (GObject * object, guint prop_id,
@@ -71,7 +75,8 @@ enum
   ARG_0,
   ARG_BITRATE,
   ARG_QUALITY,
-  ARG_VBR
+  ARG_VBR,
+  /* FILL ME */
 };
 
 /*
@@ -155,13 +160,13 @@ dmo_videoenc_init (DMOVideoEnc * enc)
   /* setup pads */
   enc->sinkpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "sink"), "sink");
-  gst_pad_set_link_function (enc->sinkpad, dmo_videoenc_link);
+  gst_pad_set_event_function (enc->sinkpad, dmo_videoenc_sink_event);
+  gst_pad_set_setcaps_function (enc->sinkpad, dmo_videoenc_sink_setcaps);
   gst_pad_set_chain_function (enc->sinkpad, dmo_videoenc_chain);
   gst_element_add_pad (GST_ELEMENT (enc), enc->sinkpad);
                                                                                 
   enc->srcpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "src"), "src");
-  gst_pad_use_explicit_caps (enc->srcpad);
   gst_element_add_pad (GST_ELEMENT (enc), enc->srcpad);
 
   enc->ctx = NULL;
@@ -172,6 +177,8 @@ dmo_videoenc_init (DMOVideoEnc * enc)
   enc->bitrate = 241000;
   enc->out_buffer_size = 0;
   enc->out_align = 0;
+
+  enc->current_ts = 0;
 }
 
 static void
@@ -226,8 +233,8 @@ dmo_videoenc_set_property (GObject * object, guint prop_id,
  * processing.
  */
 
-static GstPadLinkReturn
-dmo_videoenc_link (GstPad * pad, const GstCaps * caps)
+static gboolean
+dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
 {
   DMOVideoEnc *enc = (DMOVideoEnc *) gst_pad_get_parent (pad);
   DMOVideoEncClass *klass = (DMOVideoEncClass *) G_OBJECT_GET_CLASS (enc);
@@ -252,8 +259,7 @@ dmo_videoenc_link (GstPad * pad, const GstCaps * caps)
   if (!gst_structure_get_int (s, "width", &enc->w) ||
       !gst_structure_get_int (s, "height", &enc->h) ||
       !gst_structure_get_double (s, "framerate", &enc->fps))
-    return GST_PAD_LINK_REFUSED;
-  
+    return FALSE;
 
   /* set up dll initialization */
   dll = g_strdup_printf ("%s.dll", klass->entry->dll);
@@ -328,51 +334,65 @@ dmo_videoenc_link (GstPad * pad, const GstCaps * caps)
       "framerate", G_TYPE_DOUBLE, enc->fps, NULL);
   }
   
-  if (!gst_pad_set_explicit_caps (enc->srcpad, out)) {
-    gst_caps_free (out);
+  if (!gst_pad_set_caps (enc->srcpad, out)) {
+    gst_caps_unref (out);
     GST_ERROR ("Failed to negotiate output");
-    return GST_PAD_LINK_REFUSED;
+    return FALSE;
   }
-  gst_caps_free (out);
+  gst_caps_unref (out);
 
-  return GST_PAD_LINK_OK;
+  return TRUE;
 }
 
-static void
-dmo_videoenc_chain (GstPad * pad, GstData * data)
+static GstFlowReturn
+dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
 {
+  GstFlowReturn ret = GST_FLOW_OK;
   DMOVideoEnc *enc = (DMOVideoEnc *) gst_pad_get_parent (pad);
   GstBuffer *in_buffer = NULL;
   guint read = 0, wrote = 0, status = FALSE;
 
   Check_FS_Segment ();
 
-  in_buffer = GST_BUFFER (data);
+  /* We are not ready yet ! */
+  if (!enc->ctx) {
+    gst_buffer_unref (buffer);
+    GST_ELEMENT_ERROR (enc, CORE, NEGOTIATION, (NULL),
+          ("encoder not initialized (input is not video?)"));
+    ret = GST_FLOW_UNEXPECTED;
+    goto beach;
+  }
   
   /* encode */
   status = DMO_VideoEncoder_ProcessInput (enc->ctx,
-                                          GST_BUFFER_TIMESTAMP (in_buffer),
-                                          GST_BUFFER_DURATION (in_buffer),
-                                          GST_BUFFER_DATA (in_buffer),
-                                          GST_BUFFER_SIZE (in_buffer),
+                                          GST_BUFFER_TIMESTAMP (buffer),
+                                          GST_BUFFER_DURATION (buffer),
+                                          GST_BUFFER_DATA (buffer),
+                                          GST_BUFFER_SIZE (buffer),
                                           &read);
   
   GST_DEBUG ("read %d out of %d, time %llu duration %llu", read,
-             GST_BUFFER_SIZE (in_buffer),
-             GST_BUFFER_TIMESTAMP (in_buffer),
-             GST_BUFFER_DURATION (in_buffer));
+             GST_BUFFER_SIZE (buffer),
+             GST_BUFFER_TIMESTAMP (buffer),
+             GST_BUFFER_DURATION (buffer));
   
   if (!enc->out_buffer) {
-    enc->out_buffer = gst_buffer_new_and_alloc (enc->out_buffer_size);
+    ret = gst_pad_alloc_buffer (enc->srcpad, GST_BUFFER_OFFSET_NONE,
+                                enc->out_buffer_size, GST_PAD_CAPS (enc->srcpad),
+                                &(enc->out_buffer));
+    if (ret != GST_FLOW_OK) {
+      GST_DEBUG ("failed allocating a buffer of %d bytes from pad %p",
+                 enc->out_buffer_size, enc->srcpad);
+      goto beach;
+    }
     /* If the DMO can not set the timestamp we do our best guess */
-    GST_BUFFER_TIMESTAMP (enc->out_buffer) = GST_BUFFER_TIMESTAMP (in_buffer);
+    GST_BUFFER_TIMESTAMP (enc->out_buffer) = GST_BUFFER_TIMESTAMP (buffer);
   }
 
   /* If the DMO can not set the duration we do our best guess */
-  GST_BUFFER_DURATION (enc->out_buffer) += GST_BUFFER_DURATION (in_buffer);
+  GST_BUFFER_DURATION (enc->out_buffer) += GST_BUFFER_DURATION (buffer);
   
-  gst_buffer_unref (in_buffer);
-  in_buffer = NULL;
+  gst_buffer_unref (buffer);
   
   if (status == FALSE) {
     GstClockTime timestamp = GST_BUFFER_TIMESTAMP (enc->out_buffer);
@@ -388,7 +408,8 @@ dmo_videoenc_chain (GstPad * pad, GstData * data)
       GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
                  wrote, GST_BUFFER_TIMESTAMP (enc->out_buffer), GST_BUFFER_DURATION (enc->out_buffer));
       GST_BUFFER_SIZE (enc->out_buffer) = wrote;
-      gst_pad_push (enc->srcpad, GST_DATA (enc->out_buffer));
+      enc->current_ts = GST_BUFFER_TIMESTAMP (enc->out_buffer);
+      ret = gst_pad_push (enc->srcpad, enc->out_buffer);
       enc->out_buffer = gst_buffer_new_and_alloc (enc->out_buffer_size);
       /* If the DMO can not set the timestamp we do our best guess */
       GST_BUFFER_TIMESTAMP (enc->out_buffer) = timestamp;
@@ -398,24 +419,30 @@ dmo_videoenc_chain (GstPad * pad, GstData * data)
                GST_BUFFER_TIMESTAMP (enc->out_buffer),
                GST_BUFFER_DURATION (enc->out_buffer));
     GST_BUFFER_SIZE (enc->out_buffer) = wrote;
-    gst_pad_push (enc->srcpad, GST_DATA (enc->out_buffer));
+    enc->current_ts = GST_BUFFER_TIMESTAMP (enc->out_buffer);
+    ret = gst_pad_push (enc->srcpad, enc->out_buffer);
     enc->out_buffer = NULL;
   }
+
+beach:
+  return ret;
 }
 
-static GstElementStateReturn
-dmo_videoenc_change_state (GstElement * element)
+static GstStateChangeReturn
+dmo_videoenc_change_state (GstElement * element, GstStateChange transition)
 {
+  GstStateChangeReturn res;
   DMOVideoEnc *enc = (DMOVideoEnc *) element;
 
-  switch (GST_STATE_TRANSITION (element)) {
-    case GST_STATE_NULL_TO_READY:
+  switch (transition) {
+    case GST_STATE_CHANGE_NULL_TO_READY:
       enc->ldt_fs = Setup_LDT_Keeper ();
       break;
-    case GST_STATE_READY_TO_NULL:
+    case GST_STATE_CHANGE_READY_TO_NULL:
       Restore_LDT_Keeper (enc->ldt_fs);
       break;
-    case GST_STATE_PAUSED_TO_READY:
+    case GST_STATE_CHANGE_PAUSED_TO_READY:
+      enc->current_ts = 0;
       if (enc->ctx) {
         Check_FS_Segment ();
         DMO_VideoEncoder_Destroy (enc->ctx);
@@ -426,7 +453,60 @@ dmo_videoenc_change_state (GstElement * element)
       break;
   }
 
-  return parent_class->change_state (element);
+  res =  GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+
+  return res;
+}
+
+static gboolean
+dmo_videoenc_sink_event (GstPad * pad, GstEvent * event)
+{
+  gboolean res = TRUE;
+  DMOVideoEnc *enc;
+
+  enc = (DMOVideoEnc *) gst_pad_get_parent (pad);
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_FLUSH_START:
+      GST_DEBUG ("flush ! implement me !");
+      break;
+    case GST_EVENT_NEWSEGMENT:
+    {
+      gint64 segment_start, segment_stop, segment_base;
+      gdouble segment_rate;
+      GstFormat format;
+      GstEvent *new_seg = NULL;
+
+      gst_event_parse_newsegment (event, &segment_rate, &format, &segment_start,
+                                  &segment_stop, &segment_base);
+
+      if (format == GST_FORMAT_TIME) {
+         if (segment_stop == -1) {
+           new_seg = gst_event_new_newsegment (segment_rate, format,
+                                               enc->current_ts, -1,
+                                               segment_base);
+         }
+         else {
+           new_seg = gst_event_new_newsegment (segment_rate, format,
+                              enc->current_ts,
+                              enc->current_ts + (segment_stop - segment_start),
+                              segment_base);
+         }
+      }
+
+      gst_event_unref (event);
+
+      if (GST_IS_EVENT (new_seg)) {
+        res = gst_pad_event_default (pad, new_seg);
+      }
+      break;
+
+    }
+    default:
+      res = gst_pad_event_default (pad, event);
+      break;
+  }
+  return res;
 }
 
 /*

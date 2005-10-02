@@ -12,17 +12,17 @@ AM_MAINTAINER_MODE
 
 dnl when going to/from release please set the nano (fourth number) right !
 dnl releases only do Wall, cvs and prerelease does Werror too
-AS_VERSION(pitfdll, PITFDLL_VERSION, 0, 8, 1, 1, HAVE_CVS="no", HAVE_CVS="yes")
+AS_VERSION(pitfdll, PITFDLL_VERSION, 0, 9, 1, 1, HAVE_CVS="no", HAVE_CVS="yes")
 dnl we cheat here so we don't have to change the actual configure code bit
 GST_PLUGINS_VERSION_NANO=$PITFDLL_VERSION_NANO
 
 dnl required GStreamer version
-GST_REQ=0.8.4
+GST_REQ=0.9.1
 
 AM_INIT_AUTOMAKE($PACKAGE,$VERSION)
 
 dnl our libraries and install dirs use major.minor as a version
-GST_MAJORMINOR=0.8
+GST_MAJORMINOR=0.9
 AC_SUBST(GST_MAJORMINOR)
                                                                                 
 dnl CURRENT, REVISION, AGE
@@ -60,7 +60,8 @@ AC_CHECK_HEADERS(sys/mman.h)
 
 dnl check for gstreamer; uninstalled is selected preferentially -- see pkg-config(1)
 PKG_CHECK_MODULES(GST, gstreamer-$GST_MAJORMINOR >= $GST_REQ \
-		       gstreamer-libs-$GST_MAJORMINOR,
+		       gstreamer-base-$GST_MAJORMINOR >= $GST_REQ \
+		       gstreamer-plugins-base-$GST_MAJORMINOR >= $GST_REQ,
   HAVE_GST="yes", HAVE_GST="no")
                                                                                 
 if test "x$HAVE_GST" = "xno"; then

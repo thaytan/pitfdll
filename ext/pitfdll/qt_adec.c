@@ -98,9 +98,11 @@ typedef struct _QtAudioDecClass {
 } QtAudioDecClass;
 
 static void qt_audiodec_finalize (GObject * obj);
-static GstPadLinkReturn qt_audiodec_link (GstPad * pad, const GstCaps * caps);
-static void qt_audiodec_chain (GstPad * pad, GstData * data);
-static GstElementStateReturn qt_audiodec_change_state (GstElement * element);
+static gboolean qt_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps);
+static gboolean qt_audiodec_sink_event (GstPad * pad, GstEvent * event);
+static GstFlowReturn qt_audiodec_chain (GstPad * pad, GstBuffer * buffer);
+static GstStateChangeReturn qt_audiodec_change_state (GstElement * element,
+    GstStateChange transition);
 
 static GstElementClass *parent_class = NULL;
 
@@ -159,13 +161,13 @@ qt_audiodec_init (QtAudioDec * dec)
   /* setup pads */
   dec->sinkpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "sink"), "sink");
-  gst_pad_set_link_function (dec->sinkpad, qt_audiodec_link);
+  gst_pad_set_setcaps_function (dec->sinkpad, qt_audiodec_sink_setcaps);
+  gst_pad_set_event_function (dec->sinkpad, qt_audiodec_sink_event);
   gst_pad_set_chain_function (dec->sinkpad, qt_audiodec_chain);
   gst_element_add_pad (GST_ELEMENT (dec), dec->sinkpad);
                                                                                 
   dec->srcpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "src"), "src");
-  gst_pad_use_explicit_caps (dec->srcpad);
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
 
   dec->dll = NULL;
@@ -194,8 +196,8 @@ qt_audiodec_finalize (GObject * obj)
 #define FOUR_CHAR_CODE(a,b,c,d) \
     ((uint32_t)(a)<<24 | (uint32_t)(b)<<16 | (uint32_t)(c)<<8 | (uint32_t)(d))
 
-static GstPadLinkReturn
-qt_audiodec_link (GstPad * pad, const GstCaps * caps)
+static gboolean
+qt_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
 {
   QtAudioDec *dec = (QtAudioDec *) gst_pad_get_parent (pad);
   GstStructure *s = gst_caps_get_structure (caps, 0);
@@ -213,7 +215,7 @@ qt_audiodec_link (GstPad * pad, const GstCaps * caps)
 
   if (!dec->dll) {
     g_mutex_unlock (dec->lock);
-    return GST_PAD_LINK_DELAYED;
+    return FALSE;
   }
 
   if (dec->ctx) {
@@ -268,12 +270,12 @@ qt_audiodec_link (GstPad * pad, const GstCaps * caps)
       "depth", G_TYPE_INT, 16,
       "channels", G_TYPE_INT, dec->channels,
       "rate", G_TYPE_INT, dec->rate, NULL);
-  if (!gst_pad_set_explicit_caps (dec->srcpad, out)) {
-    gst_caps_free (out);
+  if (!gst_pad_set_caps (dec->srcpad, out)) {
+    gst_caps_unref (out);
     GST_ERROR ("Failed to negotiate output");
     goto failed;
   }
-  gst_caps_free (out);
+  gst_caps_unref (out);
 
   /* start */
   size = dec->channels * dec->rate * 2;
@@ -289,17 +291,18 @@ qt_audiodec_link (GstPad * pad, const GstCaps * caps)
 
   g_mutex_unlock (dec->lock);
 
-  return GST_PAD_LINK_OK;
+  return TRUE;
 
 failed:
   g_mutex_unlock (dec->lock);
 
-  return GST_PAD_LINK_REFUSED;
+  return FALSE;
 }
 
-static void
-qt_audiodec_chain (GstPad * pad, GstData * da)
+static GstFlowReturn
+qt_audiodec_chain (GstPad * pad, GstBuffer * buffer)
 {
+  GstFlowReturn ret;
   QtAudioDec *dec = (QtAudioDec *) gst_pad_get_parent (pad);
   GstBuffer *in, *out;
   guint8 *data;
@@ -309,14 +312,13 @@ qt_audiodec_chain (GstPad * pad, GstData * da)
   g_mutex_lock (dec->lock);
 
   /* merge */
-  in = GST_BUFFER (da);
-  time = GST_BUFFER_TIMESTAMP (in);
+  time = GST_BUFFER_TIMESTAMP (buffer);
   if (dec->cache) {
-    in = gst_buffer_merge (dec->cache, in);
+    in = gst_buffer_merge (dec->cache, buffer);
     dec->cache = NULL;
   }
-  data = GST_BUFFER_DATA (in);
-  size = GST_BUFFER_SIZE (in);
+  data = GST_BUFFER_DATA (buffer);
+  size = GST_BUFFER_SIZE (buffer);
 
   Check_FS_Segment ();
 
@@ -330,7 +332,15 @@ qt_audiodec_chain (GstPad * pad, GstData * da)
     if (!frames)
       break;
 
-    out = gst_buffer_new_and_alloc (dec->rate * dec->channels * 2);
+    ret = gst_pad_alloc_buffer (dec->srcpad, GST_BUFFER_OFFSET_NONE,
+                                dec->rate * dec->channels * 2, GST_PAD_CAPS (dec->srcpad),
+                                &(out));
+    if (ret != GST_FLOW_OK) {
+      GST_DEBUG ("failed allocating a buffer of %d bytes from pad %p",
+                 dec->rate * dec->channels * 2, dec->srcpad);
+      goto beach;
+    }
+    
     if (dec->SoundConverterConvertBuffer (dec->ctx, data, frames,
 					  GST_BUFFER_DATA (out),
 					  &out_frames, &out_bytes)) {
@@ -348,7 +358,7 @@ qt_audiodec_chain (GstPad * pad, GstData * da)
     GST_BUFFER_DURATION (out) = GST_SECOND * out_frames / dec->rate;
     time += GST_BUFFER_DURATION (out);
 
-    gst_pad_push (dec->srcpad, GST_DATA (out));
+    ret = gst_pad_push (dec->srcpad, out);
   }
 
   /* keep */
@@ -358,15 +368,19 @@ qt_audiodec_chain (GstPad * pad, GstData * da)
   gst_buffer_unref (in);
 
   g_mutex_unlock (dec->lock);
+  
+beach:
+  return ret;
 }
 
-static GstElementStateReturn
-qt_audiodec_change_state (GstElement * element)
+static GstStateChangeReturn
+qt_audiodec_change_state (GstElement * element, GstStateChange transition)
 {
+  GstStateChangeReturn res;
   QtAudioDec *dec = (QtAudioDec *) element;
 
-  switch (GST_STATE_TRANSITION (element)) {
-    case GST_STATE_NULL_TO_READY:
+  switch (transition) {
+    case GST_STATE_CHANGE_NULL_TO_READY:
       g_mutex_lock (dec->lock);
       dec->ldt_fs = Setup_LDT_Keeper ();
 #if 0
@@ -416,8 +430,8 @@ qt_audiodec_change_state (GstElement * element)
       break;
     failed:
       g_mutex_unlock (dec->lock);
-      return GST_STATE_FAILURE;
-    case GST_STATE_READY_TO_NULL:
+      return GST_STATE_CHANGE_FAILURE;
+    case GST_STATE_CHANGE_READY_TO_NULL:
       g_mutex_lock (dec->lock);
       Check_FS_Segment ();
       //FreeLibrary (dec->qts);
@@ -426,7 +440,7 @@ qt_audiodec_change_state (GstElement * element)
       Restore_LDT_Keeper (dec->ldt_fs);
       g_mutex_unlock (dec->lock);
       break;
-    case GST_STATE_PAUSED_TO_READY:
+    case GST_STATE_CHANGE_PAUSED_TO_READY:
       g_mutex_lock (dec->lock);
       Check_FS_Segment ();
       if (dec->ctx) {
@@ -446,7 +460,42 @@ qt_audiodec_change_state (GstElement * element)
       break;
   }
 
-  return parent_class->change_state (element);
+  return parent_class->change_state (element, transition);
+}
+
+static gboolean
+qt_audiodec_sink_event (GstPad * pad, GstEvent * event)
+{
+  gboolean res = TRUE;
+  QtAudioDec *dec;
+
+  dec = (QtAudioDec *) gst_pad_get_parent (pad);
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_FLUSH_START:
+      GST_DEBUG ("flush ! implement me !");
+      break;
+    case GST_EVENT_NEWSEGMENT:
+    {
+      gint64 segment_start, segment_stop, segment_base;
+      gdouble segment_rate;
+      GstFormat format;
+
+      gst_event_parse_newsegment (event, &segment_rate, &format, &segment_start,
+                                  &segment_stop, &segment_base);
+
+      if (format == GST_FORMAT_TIME) {
+        GST_DEBUG ("newsegment ! implement me !");
+      }
+
+      res = gst_pad_event_default (pad, event);
+      break;
+    }
+    default:
+      res = gst_pad_event_default (pad, event);
+      break;
+  }
+  return res;
 }
 
 /*

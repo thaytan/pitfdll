@@ -32,9 +32,6 @@ plugin_init (GstPlugin * plugin)
 {
   GST_DEBUG_CATEGORY_INIT (pitfdll_debug, "pitfdll", 0, "PitfDLL elements");
 
-  if (!gst_library_load ("gstaudio"))
-    return FALSE;
-
   dshow_vdec_register (plugin);
   dshow_adec_register (plugin);
 

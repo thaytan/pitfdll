@@ -19,9 +19,11 @@ libpitfdll_la_SOURCES = \
 libpitfdll_la_CFLAGS = \
 	$(GST_CFLAGS)
 libpitfdll_la_LIBADD = \
+	$(GST_LIBS) \
 	$(top_builddir)/gst-libs/ext/loader/wine/libloader.la \
 	$(top_builddir)/gst-libs/ext/loader/dshow/libdshow.la \
-	$(top_builddir)/gst-libs/ext/loader/dmo/libdmo.la
+	$(top_builddir)/gst-libs/ext/loader/dmo/libdmo.la \
+	-lgstaudio-@GST_MAJORMINOR@
 libpitfdll_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -lstdc++
 
 noinst_HEADERS = \

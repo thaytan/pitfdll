@@ -1,3 +1,27 @@
+2005-10-02  Julien MOUTTE  <julien@moutte.net>
+
+	* configure.ac:
+	* ext/pitfdll/Makefile.am:
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_init),
+	(dmo_audiodec_sink_setcaps), (dmo_audiodec_chain),
+	(dmo_audiodec_change_state), (dmo_audiodec_sink_event):
+	* ext/pitfdll/dmo_aenc.c: (dmo_audioenc_init),
+	(dmo_audioenc_sink_setcaps), (dmo_audioenc_chain),
+	(dmo_audioenc_change_state), (dmo_audioenc_sink_event):
+	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_init),
+	(dmo_videodec_sink_setcaps), (dmo_videodec_chain),
+	(dmo_videodec_change_state), (dmo_videodec_sink_event):
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_init),
+	(dmo_videoenc_sink_setcaps), (dmo_videoenc_chain),
+	(dmo_videoenc_change_state), (dmo_videoenc_sink_event):
+	* ext/pitfdll/dshow_vdec.c: (dshow_videodec_init),
+	(dshow_videodec_sink_setcaps), (dshow_videodec_chain),
+	(dshow_videodec_change_state), (dshow_videodec_sink_event):
+	* ext/pitfdll/pitfdll.c: (plugin_init):
+	* ext/pitfdll/qt_adec.c: (qt_audiodec_init),
+	(qt_audiodec_sink_setcaps), (qt_audiodec_chain),
+	(qt_audiodec_change_state), (qt_audiodec_sink_event): Ported to 0.9
+
 2005-09-20  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_base_init),
