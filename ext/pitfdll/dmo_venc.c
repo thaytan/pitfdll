@@ -41,8 +41,6 @@ typedef struct _DMOVideoEnc {
   gint quality;
   gint bitrate;
   gdouble fps;
-
-  GstClockTime current_ts;
   
   void *ctx;
   gulong out_buffer_size;
@@ -177,8 +175,6 @@ dmo_videoenc_init (DMOVideoEnc * enc)
   enc->bitrate = 241000;
   enc->out_buffer_size = 0;
   enc->out_align = 0;
-
-  enc->current_ts = 0;
 }
 
 static void
@@ -325,6 +321,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       "width", G_TYPE_INT, enc->w,
       "height", G_TYPE_INT, enc->h,
       "framerate", G_TYPE_DOUBLE, enc->fps,
+      "bitrate", G_TYPE_INT, enc->bitrate,
       "codec_data", GST_TYPE_BUFFER, extradata, NULL);
   }
   else {
@@ -408,7 +405,6 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
       GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
                  wrote, GST_BUFFER_TIMESTAMP (enc->out_buffer), GST_BUFFER_DURATION (enc->out_buffer));
       GST_BUFFER_SIZE (enc->out_buffer) = wrote;
-      enc->current_ts = GST_BUFFER_TIMESTAMP (enc->out_buffer);
       ret = gst_pad_push (enc->srcpad, enc->out_buffer);
       enc->out_buffer = gst_buffer_new_and_alloc (enc->out_buffer_size);
       /* If the DMO can not set the timestamp we do our best guess */
@@ -419,7 +415,6 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
                GST_BUFFER_TIMESTAMP (enc->out_buffer),
                GST_BUFFER_DURATION (enc->out_buffer));
     GST_BUFFER_SIZE (enc->out_buffer) = wrote;
-    enc->current_ts = GST_BUFFER_TIMESTAMP (enc->out_buffer);
     ret = gst_pad_push (enc->srcpad, enc->out_buffer);
     enc->out_buffer = NULL;
   }
@@ -442,7 +437,6 @@ dmo_videoenc_change_state (GstElement * element, GstStateChange transition)
       Restore_LDT_Keeper (enc->ldt_fs);
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
-      enc->current_ts = 0;
       if (enc->ctx) {
         Check_FS_Segment ();
         DMO_VideoEncoder_Destroy (enc->ctx);
@@ -470,38 +464,6 @@ dmo_videoenc_sink_event (GstPad * pad, GstEvent * event)
     case GST_EVENT_FLUSH_START:
       GST_DEBUG ("flush ! implement me !");
       break;
-    case GST_EVENT_NEWSEGMENT:
-    {
-      gint64 segment_start, segment_stop, segment_base;
-      gdouble segment_rate;
-      GstFormat format;
-      GstEvent *new_seg = NULL;
-
-      gst_event_parse_newsegment (event, &segment_rate, &format, &segment_start,
-                                  &segment_stop, &segment_base);
-
-      if (format == GST_FORMAT_TIME) {
-         if (segment_stop == -1) {
-           new_seg = gst_event_new_newsegment (segment_rate, format,
-                                               enc->current_ts, -1,
-                                               segment_base);
-         }
-         else {
-           new_seg = gst_event_new_newsegment (segment_rate, format,
-                              enc->current_ts,
-                              enc->current_ts + (segment_stop - segment_start),
-                              segment_base);
-         }
-      }
-
-      gst_event_unref (event);
-
-      if (GST_IS_EVENT (new_seg)) {
-        res = gst_pad_event_default (pad, new_seg);
-      }
-      break;
-
-    }
     default:
       res = gst_pad_event_default (pad, event);
       break;

@@ -1,3 +1,13 @@
+2005-10-05  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/dmo_aenc.c: (dmo_audioenc_init),
+	(dmo_audioenc_chain), (dmo_audioenc_change_state),
+	(dmo_audioenc_sink_event):
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_init),
+	(dmo_videoenc_sink_setcaps), (dmo_videoenc_chain),
+	(dmo_videoenc_change_state), (dmo_videoenc_sink_event): Handle
+	newsegment correctly.
+
 2005-10-02  Julien MOUTTE  <julien@moutte.net>
 
 	* configure.ac:
