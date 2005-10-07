@@ -33,7 +33,8 @@ int DMO_VideoEncoder_ProcessOutput (DMO_VideoEncoder * this,
                                     void * out_data, unsigned int out_size,
                                     unsigned int * size_written,
                                     unsigned long long * timestamp,
-                                    unsigned long long * duration);
+                                    unsigned long long * duration,
+                                    unsigned int * key_frame);
 
 
 #endif /* AVIFILE_DMO_VIDEOENCODER_H */

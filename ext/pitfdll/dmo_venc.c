@@ -306,7 +306,6 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
     }
   }
   g_free (dll);
-  g_free (hdr);
 
   DMO_VideoEncoder_GetOutputInfos (enc->ctx, &enc->out_buffer_size,
                                    &enc->out_align);
@@ -322,14 +321,19 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       "height", G_TYPE_INT, enc->h,
       "framerate", G_TYPE_DOUBLE, enc->fps,
       "bitrate", G_TYPE_INT, enc->bitrate,
+      "bpp", G_TYPE_INT, hdr->bit_cnt,
       "codec_data", GST_TYPE_BUFFER, extradata, NULL);
   }
   else {
     gst_caps_set_simple (out,
       "width", G_TYPE_INT, enc->w,
       "height", G_TYPE_INT, enc->h,
+      "bitrate", G_TYPE_INT, enc->bitrate,
+      "bpp", G_TYPE_INT, hdr->bit_cnt,
       "framerate", G_TYPE_DOUBLE, enc->fps, NULL);
   }
+  
+  g_free (hdr);
   
   if (!gst_pad_set_caps (enc->srcpad, out)) {
     gst_caps_unref (out);
@@ -392,6 +396,7 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
   gst_buffer_unref (buffer);
   
   if (status == FALSE) {
+    gboolean key_frame = FALSE;
     GstClockTime timestamp = GST_BUFFER_TIMESTAMP (enc->out_buffer);
     GST_DEBUG ("we have some output buffers to collect (size is %d)",
                GST_BUFFER_SIZE (enc->out_buffer));
@@ -401,21 +406,37 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
                            GST_BUFFER_SIZE (enc->out_buffer),
                            &wrote,
                            &(GST_BUFFER_TIMESTAMP (enc->out_buffer)),
-                           &(GST_BUFFER_DURATION (enc->out_buffer)))) == TRUE) {
-      GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
-                 wrote, GST_BUFFER_TIMESTAMP (enc->out_buffer), GST_BUFFER_DURATION (enc->out_buffer));
-      GST_BUFFER_SIZE (enc->out_buffer) = wrote;
-      ret = gst_pad_push (enc->srcpad, enc->out_buffer);
+                           &(GST_BUFFER_DURATION (enc->out_buffer)),
+                           &key_frame)) == TRUE) {
+      if (wrote) {
+        GST_DEBUG ("there is another output buffer to collect, pushing %d " \
+                   "bytes timestamp %llu duration %llu", wrote,
+                   GST_BUFFER_TIMESTAMP (enc->out_buffer),
+                   GST_BUFFER_DURATION (enc->out_buffer));
+        GST_BUFFER_SIZE (enc->out_buffer) = wrote;
+        if (!key_frame) {
+          GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+        }
+        ret = gst_pad_push (enc->srcpad, enc->out_buffer);
+      }
+      else {
+        gst_buffer_unref (enc->out_buffer);
+      }
       enc->out_buffer = gst_buffer_new_and_alloc (enc->out_buffer_size);
       /* If the DMO can not set the timestamp we do our best guess */
       GST_BUFFER_TIMESTAMP (enc->out_buffer) = timestamp;
       GST_BUFFER_DURATION (enc->out_buffer) = 0;
     }
-    GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
-               GST_BUFFER_TIMESTAMP (enc->out_buffer),
-               GST_BUFFER_DURATION (enc->out_buffer));
-    GST_BUFFER_SIZE (enc->out_buffer) = wrote;
-    ret = gst_pad_push (enc->srcpad, enc->out_buffer);
+    if (wrote) {
+      GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
+                 GST_BUFFER_TIMESTAMP (enc->out_buffer),
+                 GST_BUFFER_DURATION (enc->out_buffer));
+      GST_BUFFER_SIZE (enc->out_buffer) = wrote;
+      ret = gst_pad_push (enc->srcpad, enc->out_buffer);
+    }
+    else {
+      gst_buffer_unref (enc->out_buffer);
+    }
     enc->out_buffer = NULL;
   }
 

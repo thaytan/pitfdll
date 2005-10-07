@@ -175,6 +175,7 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
         this->m_sOurType.subtype = *c->subtype;
         /* We trust our table more than the input format */
         this->m_sVhdr->bmiHeader.biBitCount = c->bits;
+        format->biBitCount = c->bits;
       }
     }
   }
@@ -390,7 +391,8 @@ int DMO_VideoEncoder_ProcessOutput (DMO_VideoEncoder * this,
                                     void * out_data, unsigned int out_size,
                                     unsigned int * size_written,
                                     unsigned long long * timestamp,
-                                    unsigned long long * duration)
+                                    unsigned long long * duration,
+                                    unsigned int * key_frame)
 {
   DMO_OUTPUT_DATA_BUFFER * db = NULL;
   unsigned long written = 0, status = 0, index;
@@ -439,6 +441,14 @@ int DMO_VideoEncoder_ProcessOutput (DMO_VideoEncoder * this,
       (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_TIMELENGTH)) {
     *timestamp = db[0].rtTimestamp * 100;
     *duration = db[0].rtTimelength * 100;
+  }
+  
+  /* Is that a key frame ? */
+  if (key_frame && (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_SYNCPOINT)) {
+    *key_frame = TRUE;
+  }
+  else if (key_frame) {
+    *key_frame = FALSE;
   }
   
   if ((db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE) != 0) {
