@@ -1,5 +1,10 @@
 2005-10-12  Julien MOUTTE  <julien@moutte.net>
 
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_chain):
+	* gst-libs/ext/loader/dmo/dmo.h: Handle key frames correctly ! doh !
+
+2005-10-12  Julien MOUTTE  <julien@moutte.net>
+
 	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_sink_event):
 	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_sink_event):
 	* ext/pitfdll/dshow_vdec.c: (dshow_videodec_sink_event):

@@ -415,7 +415,10 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
                    GST_BUFFER_DURATION (enc->out_buffer));
         GST_BUFFER_SIZE (enc->out_buffer) = wrote;
         if (!key_frame) {
-          GST_BUFFER_FLAG_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+          GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+        }
+        else {
+          GST_BUFFER_FLAG_UNSET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
         }
         ret = gst_pad_push (enc->srcpad, enc->out_buffer);
       }
@@ -432,6 +435,12 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
                  GST_BUFFER_TIMESTAMP (enc->out_buffer),
                  GST_BUFFER_DURATION (enc->out_buffer));
       GST_BUFFER_SIZE (enc->out_buffer) = wrote;
+      if (!key_frame) {
+        GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+      }
+      else {
+        GST_BUFFER_FLAG_UNSET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+      }
       ret = gst_pad_push (enc->srcpad, enc->out_buffer);
     }
     else {
