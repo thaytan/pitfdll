@@ -362,9 +362,10 @@ dmo_videodec_sink_event (GstPad * pad, GstEvent * event)
       gint64 segment_start, segment_stop, segment_base;
       gdouble segment_rate;
       GstFormat format;
+      gboolean update;
 
-      gst_event_parse_newsegment (event, &segment_rate, &format, &segment_start,
-                                  &segment_stop, &segment_base);
+      gst_event_parse_newsegment (event, &update, &segment_rate, &format,
+                                  &segment_start, &segment_stop, &segment_base);
 
       if (format == GST_FORMAT_TIME) {
         GST_DEBUG ("newsegment ! implement me !");

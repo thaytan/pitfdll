@@ -1,3 +1,11 @@
+2005-10-12  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_sink_event):
+	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_sink_event):
+	* ext/pitfdll/dshow_vdec.c: (dshow_videodec_sink_event):
+	* ext/pitfdll/qt_adec.c: (qt_audiodec_sink_event): Fix for newsegment
+	API changes.
+
 2005-10-07  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_sink_setcaps),
