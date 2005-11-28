@@ -8,7 +8,7 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
                                           unsigned int dest_fourcc,
                                           unsigned int vbr,
                                           unsigned long bitrate,
-                                          float framerate,
+                                          int fps_n, int fps_d,
                                           char ** data,
                                           unsigned long * data_length);
 

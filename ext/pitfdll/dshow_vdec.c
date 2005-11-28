@@ -35,7 +35,7 @@ typedef struct _DSVideoDec {
 
   /* settings */
   gint w, h;
-  gdouble fps;
+  gint fps_d, fps_n;
   void *ctx;
   ldt_fs_t *ldt_fs;
 } DSVideoDec;
@@ -85,7 +85,7 @@ dshow_videodec_base_init (DSVideoDecClass * klass)
   gst_caps_set_simple (sinkcaps,
       "width", GST_TYPE_INT_RANGE, 16, 4096,
       "height", GST_TYPE_INT_RANGE, 16, 4096,
-      "framerate", GST_TYPE_DOUBLE_RANGE, 1.0, 100.0, NULL);
+      "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1, NULL);
   snk = gst_pad_template_new ("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sinkcaps);
 
   /* source, simple */
@@ -127,7 +127,7 @@ dshow_videodec_init (DSVideoDec * dec)
   gst_pad_set_event_function (dec->sinkpad, dshow_videodec_sink_event);
   gst_pad_set_chain_function (dec->sinkpad, dshow_videodec_chain);
   gst_element_add_pad (GST_ELEMENT (dec), dec->sinkpad);
-                                                                                
+  
   dec->srcpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "src"), "src");
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
@@ -157,6 +157,7 @@ dshow_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   gchar *dll;
   gint size;
   GstCaps *out;
+  const GValue *fps;
 
   Check_FS_Segment ();
 
@@ -167,9 +168,17 @@ dshow_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
 
   /* read data */
   if (!gst_structure_get_int (s, "width", &dec->w) ||
-      !gst_structure_get_int (s, "height", &dec->h) ||
-      !gst_structure_get_double (s, "framerate", &dec->fps))
+      !gst_structure_get_int (s, "height", &dec->h)) {
     return FALSE;
+  }
+  
+  fps = gst_structure_get_value (s, "framerate");
+  if (!fps) {
+    return FALSE;
+  }
+  
+  dec->fps_n = gst_value_get_fraction_numerator (fps);
+  dec->fps_d = gst_value_get_fraction_denominator (fps);
   
   if ((v = gst_structure_get_value (s, "codec_data")))
     extradata = gst_value_get_buffer (v);
@@ -190,8 +199,8 @@ dshow_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   hdr->planes = 1;
   hdr->bit_cnt = 16;
   hdr->compression = klass->entry->format;
-  GST_DEBUG ("Will now open %s using %dx%d@%lffps",
-             dll, dec->w, dec->h, dec->fps);
+  GST_DEBUG ("Will now open %s using %dx%d@%d/%dfps",
+             dll, dec->w, dec->h, dec->fps_n, dec->fps_d);
   if (!(dec->ctx = DS_VideoDecoder_Open (dll, &klass->entry->guid,
                                          hdr, 0, 0))) {
     g_free (dll);
@@ -206,7 +215,7 @@ dshow_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   out = gst_caps_new_simple ("video/x-raw-yuv",
       "width", G_TYPE_INT, dec->w,
       "height", G_TYPE_INT, dec->h,
-      "framerate", G_TYPE_DOUBLE, dec->fps,
+      "framerate", GST_TYPE_FRACTION, dec->fps_n, dec->fps_d,
       "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC ('Y','U','Y','2'), NULL);
   if (!gst_pad_set_caps (dec->srcpad, out)) {
     gst_caps_unref (out);
@@ -245,8 +254,7 @@ dshow_videodec_chain (GstPad * pad, GstBuffer * buffer)
                ALIGN_2 (dec->w) * dec->h * 2, dec->srcpad);
     goto beach;
   }
-  GST_BUFFER_TIMESTAMP (out) = GST_BUFFER_TIMESTAMP (buffer);
-  GST_BUFFER_DURATION (out) = GST_BUFFER_DURATION (buffer);
+  gst_buffer_stamp (out, buffer);
   DS_VideoDecoder_DecodeInternal (dec->ctx,
       GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer), 1, GST_BUFFER_DATA (out));
   gst_buffer_unref (buffer);
@@ -304,7 +312,7 @@ dshow_videodec_sink_event (GstPad * pad, GstEvent * event)
       GstFormat format;
       gboolean update;
 
-      gst_event_parse_newsegment (event, &update, &segment_rate, &format,
+      gst_event_parse_new_segment (event, &update, &segment_rate, &format,
                                   &segment_start, &segment_stop, &segment_base);
 
       if (format == GST_FORMAT_TIME) {

@@ -389,7 +389,7 @@ dmo_audiodec_sink_event (GstPad * pad, GstEvent * event)
       GstFormat format;
       gboolean update;
 
-      gst_event_parse_newsegment (event, &update, &segment_rate, &format,
+      gst_event_parse_new_segment (event, &update, &segment_rate, &format,
                                   &segment_start, &segment_stop, &segment_base);
 
       if (format == GST_FORMAT_TIME) {

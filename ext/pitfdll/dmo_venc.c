@@ -40,7 +40,7 @@ typedef struct _DMOVideoEnc {
   gboolean vbr;
   gint quality;
   gint bitrate;
-  gdouble fps;
+  gint fps_n, fps_d;
   
   void *ctx;
   gulong out_buffer_size;
@@ -73,7 +73,7 @@ enum
   ARG_0,
   ARG_BITRATE,
   ARG_QUALITY,
-  ARG_VBR,
+  ARG_VBR
   /* FILL ME */
 };
 
@@ -114,7 +114,7 @@ dmo_videoenc_base_init (DMOVideoEncClass * klass)
   gst_caps_set_simple (srccaps,
       "width", GST_TYPE_INT_RANGE, 16, 4096,
       "height", GST_TYPE_INT_RANGE, 16, 4096,
-      "framerate", GST_TYPE_DOUBLE_RANGE, 1.0, 100.0, NULL);
+      "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1, NULL);
   src = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, srccaps);
 
   /* register */
@@ -242,6 +242,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   char * data = NULL, * dll = NULL;
   unsigned long data_length = 0;
   GstBuffer * extradata = NULL;
+  const GValue *fps;
   
   
   Check_FS_Segment ();
@@ -253,9 +254,17 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
 
   /* read data */ 
   if (!gst_structure_get_int (s, "width", &enc->w) ||
-      !gst_structure_get_int (s, "height", &enc->h) ||
-      !gst_structure_get_double (s, "framerate", &enc->fps))
+      !gst_structure_get_int (s, "height", &enc->h)) {
     return FALSE;
+  }
+  
+  fps = gst_structure_get_value (s, "framerate");
+  if (!fps) {
+    return FALSE;
+  }
+  
+  enc->fps_n = gst_value_get_fraction_numerator (fps);
+  enc->fps_d = gst_value_get_fraction_denominator (fps);
 
   /* set up dll initialization */
   dll = g_strdup_printf ("%s.dll", klass->entry->dll);
@@ -281,13 +290,13 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       return GST_PAD_LINK_REFUSED;
     GST_DEBUG ("Using YUV with fourcc");
   }
-  GST_DEBUG ("Will now open %s using %dx%d@%lffps",
-	           dll, enc->w, enc->h, enc->fps);
+  GST_DEBUG ("Will now open %s using %dx%d@%d/%dfps",
+	           dll, enc->w, enc->h, enc->fps_n, enc->fps_d);
   if (enc->vbr) {
     if (!(enc->ctx = DMO_VideoEncoder_Open (dll, &(klass->entry->guid), hdr, 
                                             klass->entry->format, enc->vbr,
-                                            enc->quality, enc->fps,
-                                            &data, &data_length))) {
+                                            enc->quality, enc->fps_n,
+                                            enc->fps_d, &data, &data_length))) {
       GST_ERROR ("Failed to open DLL %s", dll);
       g_free (dll);
       g_free (hdr);
@@ -297,8 +306,8 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   else {
     if (!(enc->ctx = DMO_VideoEncoder_Open (dll, &(klass->entry->guid), hdr, 
                                             klass->entry->format, enc->vbr,
-                                            enc->bitrate, enc->fps,
-                                            &data, &data_length))) {
+                                            enc->bitrate, enc->fps_n,
+                                            enc->fps_d, &data, &data_length))) {
       GST_ERROR ("Failed to open DLL %s", dll);
       g_free (dll);
       g_free (hdr);
@@ -319,7 +328,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
     gst_caps_set_simple (out,
       "width", G_TYPE_INT, enc->w,
       "height", G_TYPE_INT, enc->h,
-      "framerate", G_TYPE_DOUBLE, enc->fps,
+      "framerate", GST_TYPE_FRACTION, enc->fps_n, enc->fps_d,
       "bitrate", G_TYPE_INT, enc->bitrate,
       "bpp", G_TYPE_INT, hdr->bit_cnt,
       "codec_data", GST_TYPE_BUFFER, extradata, NULL);
@@ -330,7 +339,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       "height", G_TYPE_INT, enc->h,
       "bitrate", G_TYPE_INT, enc->bitrate,
       "bpp", G_TYPE_INT, hdr->bit_cnt,
-      "framerate", G_TYPE_DOUBLE, enc->fps, NULL);
+      "framerate", GST_TYPE_FRACTION, enc->fps_n, enc->fps_d, NULL);
   }
   
   g_free (hdr);
