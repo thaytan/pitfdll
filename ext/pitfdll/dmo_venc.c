@@ -243,6 +243,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   unsigned long data_length = 0;
   GstBuffer * extradata = NULL;
   const GValue *fps;
+  gboolean ret = FALSE;
   
   
   Check_FS_Segment ();
@@ -255,12 +256,12 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   /* read data */ 
   if (!gst_structure_get_int (s, "width", &enc->w) ||
       !gst_structure_get_int (s, "height", &enc->h)) {
-    return FALSE;
+    goto beach;
   }
   
   fps = gst_structure_get_value (s, "framerate");
   if (!fps) {
-    return FALSE;
+    goto beach;
   }
   
   enc->fps_n = gst_value_get_fraction_numerator (fps);
@@ -279,7 +280,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (strcmp (structure_name, "video/x-raw-rgb") == 0) {
     gint bpp;
     if (!gst_structure_get_int (s, "bpp", &bpp))
-      return GST_PAD_LINK_REFUSED;
+      goto beach;
     hdr->bit_cnt = bpp;
     GST_DEBUG ("Using RGB%d", hdr->bit_cnt);
     hdr->compression = 0;
@@ -287,7 +288,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   /* else if (gst_structure_has_name (s, "video/x-raw-yuv")) {*/
   else if (strcmp (structure_name, "video/x-raw-yuv") == 0) {
     if (!gst_structure_get_fourcc (s, "format", (guint32 *) &hdr->compression))
-      return GST_PAD_LINK_REFUSED;
+      goto beach;
     GST_DEBUG ("Using YUV with fourcc");
   }
   GST_DEBUG ("Will now open %s using %dx%d@%d/%dfps",
@@ -300,7 +301,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       GST_ERROR ("Failed to open DLL %s", dll);
       g_free (dll);
       g_free (hdr);
-      return GST_PAD_LINK_REFUSED;
+      goto beach;
     }
   }
   else {
@@ -311,7 +312,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       GST_ERROR ("Failed to open DLL %s", dll);
       g_free (dll);
       g_free (hdr);
-      return GST_PAD_LINK_REFUSED;
+      goto beach;
     }
   }
   g_free (dll);
@@ -347,11 +348,16 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (enc->srcpad, out)) {
     gst_caps_unref (out);
     GST_ERROR ("Failed to negotiate output");
-    return FALSE;
+    goto beach;
   }
   gst_caps_unref (out);
+  
+  ret = TRUE;
+  
+beach:
+  gst_object_unref (enc);
 
-  return TRUE;
+  return ret;
 }
 
 static GstFlowReturn
@@ -366,10 +372,7 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
 
   /* We are not ready yet ! */
   if (!enc->ctx) {
-    gst_buffer_unref (buffer);
-    GST_ELEMENT_ERROR (enc, CORE, NEGOTIATION, (NULL),
-          ("encoder not initialized (input is not video?)"));
-    ret = GST_FLOW_UNEXPECTED;
+    ret = GST_FLOW_WRONG_STATE;
     goto beach;
   }
   
@@ -401,8 +404,6 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
 
   /* If the DMO can not set the duration we do our best guess */
   GST_BUFFER_DURATION (enc->out_buffer) += GST_BUFFER_DURATION (buffer);
-  
-  gst_buffer_unref (buffer);
   
   if (status == FALSE) {
     gboolean key_frame = FALSE;
@@ -459,6 +460,9 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
   }
 
 beach:
+  gst_buffer_unref (buffer);
+  gst_object_unref (enc);
+  
   return ret;
 }
 

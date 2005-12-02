@@ -257,6 +257,7 @@ dmo_audioenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   GstCaps *out;
   const GValue *v;
   GstBuffer *extradata = NULL;
+  gboolean ret = FALSE;
 
   Check_FS_Segment ();
 
@@ -269,7 +270,7 @@ dmo_audioenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (!gst_structure_get_int (s, "rate", &enc->rate) ||
       !gst_structure_get_int (s, "channels", &enc->channels) ||
       !gst_structure_get_int (s, "depth", &enc->depth))
-    return FALSE;
+    goto beach;
 
   /* set up dll initialization */
   dll = g_strdup_printf ("%s.dll", klass->entry->dll);
@@ -290,7 +291,7 @@ dmo_audioenc_sink_setcaps (GstPad * pad, GstCaps * caps)
     GST_ERROR ("Failed to open DLL %s", dll);
     g_free (dll);
     g_free (target_format);
-    return GST_PAD_LINK_REFUSED;
+    goto beach;
   }
   g_free (dll);
   g_free (target_format);
@@ -337,11 +338,16 @@ dmo_audioenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (enc->srcpad, out)) {
     gst_caps_unref (out);
     GST_ERROR ("Failed to negotiate output");
-    return FALSE;
+    goto beach;
   }
   gst_caps_unref (out);
 
-  return TRUE;
+  ret = TRUE;
+  
+beach:
+  gst_object_unref (enc);
+  
+  return ret;
 }
 
 static GstFlowReturn
@@ -356,10 +362,7 @@ dmo_audioenc_chain (GstPad * pad, GstBuffer * buffer)
   
   /* We are not ready yet ! */
   if (!enc->ctx) {
-    gst_buffer_unref (buffer);
-    GST_ELEMENT_ERROR (enc, CORE, NEGOTIATION, (NULL),
-          ("encoder not initialized (input is not audio?)"));
-    ret = GST_FLOW_UNEXPECTED;
+    ret = GST_FLOW_WRONG_STATE;
     goto beach;
   }
   
@@ -392,8 +395,6 @@ dmo_audioenc_chain (GstPad * pad, GstBuffer * buffer)
   /* If the DMO can not set the duration we do our best guess */
   GST_BUFFER_DURATION (enc->out_buffer) += GST_BUFFER_DURATION (buffer);
   
-  gst_buffer_unref (buffer);
-  
   if (status == FALSE) {
     GstClockTime timestamp = GST_BUFFER_TIMESTAMP (enc->out_buffer);
     GST_DEBUG ("we have some output buffers to collect (size is %d)",
@@ -425,6 +426,9 @@ dmo_audioenc_chain (GstPad * pad, GstBuffer * buffer)
   }
   
 beach:
+  gst_buffer_unref (buffer);
+  gst_object_unref (enc);
+  
   return ret;
 }
 

@@ -22,7 +22,7 @@ GST_REQ=0.9.1
 AM_INIT_AUTOMAKE($PACKAGE,$VERSION)
 
 dnl our libraries and install dirs use major.minor as a version
-GST_MAJORMINOR=0.9
+GST_MAJORMINOR=0.10
 AC_SUBST(GST_MAJORMINOR)
                                                                                 
 dnl CURRENT, REVISION, AGE

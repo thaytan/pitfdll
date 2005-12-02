@@ -168,6 +168,9 @@ dmo_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   gint size;
   GstCaps *out;
   const GValue *fps;
+  gboolean ret = FALSE;
+  
+  GST_DEBUG_OBJECT (dec, "setcaps called with %" GST_PTR_FORMAT, caps);
 
   Check_FS_Segment ();
 
@@ -179,12 +182,12 @@ dmo_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   /* read data */
   if (!gst_structure_get_int (s, "width", &dec->w) ||
       !gst_structure_get_int (s, "height", &dec->h)) {
-    return FALSE;
+    goto beach;
   }
   
   fps = gst_structure_get_value (s, "framerate");
   if (!fps) {
-    return FALSE;
+    goto beach;
   }
   
   dec->fps_n = gst_value_get_fraction_numerator (fps);
@@ -215,7 +218,7 @@ dmo_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
     GST_ERROR ("Failed to open DLL %s", dll);
     g_free (dll);
     g_free (hdr);
-    return GST_PAD_LINK_REFUSED;
+    goto beach;
   }
   g_free (dll);
   g_free (hdr);
@@ -234,11 +237,16 @@ dmo_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (dec->srcpad, out)) {
     gst_caps_unref (out);
     GST_ERROR ("Failed to negotiate output");
-    return FALSE;
+    goto beach;
   }
   gst_caps_unref (out);
-
-  return TRUE;
+  
+  ret = TRUE;
+  
+beach:
+  gst_object_unref (dec);
+  
+  return ret;
 }
 
 #define ALIGN_2(x) ((x+1)&~1)
@@ -255,10 +263,7 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
 
   /* We are not ready yet ! */
   if (!dec->ctx) {
-    gst_buffer_unref (buffer);
-    GST_ELEMENT_ERROR (dec, CORE, NEGOTIATION, (NULL),
-          ("decoder not initialized (input is not video?)"));
-    ret = GST_FLOW_UNEXPECTED;
+    ret = GST_FLOW_WRONG_STATE;
     goto beach;
   }
   
@@ -291,8 +296,6 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
   /* If the DMO can not set the duration we do our best guess */
   GST_BUFFER_DURATION (dec->out_buffer) += GST_BUFFER_DURATION (buffer);
   
-  gst_buffer_unref (buffer);
-  
   if (status == FALSE) {
     GstClockTime timestamp = GST_BUFFER_TIMESTAMP (dec->out_buffer);
     GST_DEBUG ("we have some output buffers to collect (size is %d)",
@@ -320,8 +323,11 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
     ret = gst_pad_push (dec->srcpad, dec->out_buffer);
     dec->out_buffer = NULL;
   }
-
+  
 beach:
+  gst_buffer_unref (buffer);
+  gst_object_unref (dec);
+  
   return ret;
 }
 
@@ -340,6 +346,7 @@ dmo_videodec_change_state (GstElement * element, GstStateChange transition)
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       if (dec->ctx) {
+        GST_DEBUG_OBJECT (dec, "cleaning up DMO decoder");
         Check_FS_Segment ();
         DMO_VideoDecoder_Destroy (dec->ctx);
         dec->ctx = NULL;

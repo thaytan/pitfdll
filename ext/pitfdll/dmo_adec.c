@@ -174,6 +174,9 @@ dmo_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   const GValue *v;
   GstBuffer *extradata = NULL;
   GstCaps *out;
+  gboolean ret = FALSE;
+  
+  GST_DEBUG_OBJECT (dec, "setcaps called with %" GST_PTR_FORMAT, caps);
 
   Check_FS_Segment ();
 
@@ -187,8 +190,9 @@ dmo_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
       !gst_structure_get_int (s, "block_align", &dec->block_align) ||
       !gst_structure_get_int (s, "rate", &dec->rate) ||
       !gst_structure_get_int (s, "channels", &dec->channels) ||
-      !gst_structure_get_int (s, "depth", &dec->depth))
-    return FALSE;
+      !gst_structure_get_int (s, "depth", &dec->depth)) {
+    goto beach;
+  }
   
   if ((v = gst_structure_get_value (s, "codec_data")))
     extradata = gst_value_get_buffer (v);
@@ -215,7 +219,7 @@ dmo_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
     GST_ERROR ("Failed to open DLL %s", dll);
     g_free (dll);
     g_free (hdr);
-    return GST_PAD_LINK_REFUSED;
+    goto beach;
   }
   g_free (dll);
   g_free (hdr);
@@ -252,11 +256,16 @@ dmo_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (!gst_pad_set_caps (dec->srcpad, out)) {
     gst_caps_unref (out);
     GST_ERROR ("Failed to negotiate output");
-    return FALSE;
+    goto beach;
   }
   gst_caps_unref (out);
+  
+  ret = TRUE;
 
-  return TRUE;
+beach:
+  gst_object_unref (dec);
+  
+  return ret;
 }
 
 static GstFlowReturn
@@ -271,10 +280,7 @@ dmo_audiodec_chain (GstPad * pad, GstBuffer * buffer)
 
   /* We are not ready yet ! */
   if (!dec->ctx) {
-    gst_buffer_unref (buffer);
-    GST_ELEMENT_ERROR (dec, CORE, NEGOTIATION, (NULL),
-          ("decoder not initialized (input is not audio?)"));
-    ret = GST_FLOW_UNEXPECTED;
+    ret = GST_FLOW_WRONG_STATE;
     goto beach;
   }
   
@@ -307,8 +313,6 @@ dmo_audiodec_chain (GstPad * pad, GstBuffer * buffer)
   /* If the DMO can not set the duration we do our best guess */
   GST_BUFFER_DURATION (dec->out_buffer) += GST_BUFFER_DURATION (buffer);
   
-  gst_buffer_unref (buffer);
-  
   if (status == FALSE) {
     GstClockTime timestamp = GST_BUFFER_TIMESTAMP (dec->out_buffer);
     GST_DEBUG ("we have some output buffers to collect (size is %d)",
@@ -338,6 +342,9 @@ dmo_audiodec_chain (GstPad * pad, GstBuffer * buffer)
   }
   
 beach:
+  gst_buffer_unref (buffer);
+  gst_object_unref (dec);
+  
   return ret;
 }
 

@@ -1,3 +1,16 @@
+2005-12-02  Julien MOUTTE  <julien@moutte.net>
+
+	* configure.ac: Use 0.10.
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_sink_setcaps),
+	(dmo_audiodec_chain):
+	* ext/pitfdll/dmo_aenc.c: (dmo_audioenc_sink_setcaps),
+	(dmo_audioenc_chain):
+	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_sink_setcaps),
+	(dmo_videodec_chain), (dmo_videodec_change_state):
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_sink_setcaps),
+	(dmo_videoenc_chain): leak fixes and better handling of new
+	core behavior.
+
 2005-11-28  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_sink_event):
