@@ -76,6 +76,7 @@ int DMO_Filter_GetProperty (DMO_Filter * This, const WCHAR * name,
                             VARIANT * value, char ** error_message);
                                      
 int DMO_Filter_Discontinuity (DMO_Filter * This, char ** error_message);
+int DMO_Filter_Flush (DMO_Filter * This, char ** error_message);
 
 /**
  * Create IMediaBuffer object - to pass/receive data from DMO_Filter

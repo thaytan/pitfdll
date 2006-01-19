@@ -8,6 +8,8 @@ DMO_VideoDecoder * DMO_VideoDecoder_Open (char * dllname, GUID * guid,
 
 void DMO_VideoDecoder_Destroy (DMO_VideoDecoder * this);
 
+void DMO_VideoDecoder_Flush (DMO_VideoDecoder * this);
+
 int DMO_VideoDecoder_GetOutputInfos (DMO_VideoDecoder * this, 
                                      unsigned long * out_buffer_size,
                                      unsigned long * out_align);

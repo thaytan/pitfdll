@@ -204,6 +204,13 @@ void DMO_AudioDecoder_Destroy(DMO_AudioDecoder * this)
   }
 }
 
+void DMO_AudioDecoder_Flush (DMO_AudioDecoder * this)
+{
+  char * error_message = NULL;
+  
+  DMO_Filter_Flush (this->m_pDMO_Filter, &error_message);
+}
+
 int DMO_AudioDecoder_Convert (DMO_AudioDecoder * this, const void * in_data,
                               unsigned int in_size, void * out_data,
                               unsigned int out_size, unsigned int * size_read,

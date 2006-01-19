@@ -17,6 +17,8 @@ DMO_AudioDecoder * DMO_AudioDecoder_Open (char * dllname, GUID * guid,
 
 void DMO_AudioDecoder_Destroy (DMO_AudioDecoder * this);
 
+void DMO_AudioDecoder_Flush (DMO_AudioDecoder * this);
+
 int DMO_AudioDecoder_Convert (DMO_AudioDecoder * this, const void * in_data,
                               unsigned int in_size, void * out_data,
                               unsigned int out_size, unsigned int * size_read,

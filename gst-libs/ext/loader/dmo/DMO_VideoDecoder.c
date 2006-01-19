@@ -247,6 +247,13 @@ void DMO_VideoDecoder_Destroy (DMO_VideoDecoder * this)
   }
 }
 
+void DMO_VideoDecoder_Flush (DMO_VideoDecoder * this)
+{
+  char * error_message = NULL;
+  
+  DMO_Filter_Flush (this->m_pDMO_Filter, &error_message);
+}
+
 int DMO_VideoDecoder_ProcessInput (DMO_VideoDecoder * this,
                                    unsigned long long timestamp,
                                    unsigned long long duration,

@@ -386,8 +386,9 @@ dmo_audiodec_sink_event (GstPad * pad, GstEvent * event)
   dec = (DMOAudioDec *) gst_pad_get_parent (pad);
 
   switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_FLUSH_START:
-      GST_DEBUG ("flush ! implement me !");
+    case GST_EVENT_FLUSH_STOP:
+      DMO_AudioDecoder_Flush (dec->ctx);
+      res = gst_pad_event_default (pad, event);
       break;
     case GST_EVENT_NEWSEGMENT:
     {

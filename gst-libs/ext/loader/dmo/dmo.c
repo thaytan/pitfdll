@@ -468,6 +468,30 @@ beach:
   return TRUE;   
 }
 
+int DMO_Filter_Flush (DMO_Filter * This, char ** error_message)
+{
+  HRESULT hr = 0;
+  char * local_error = NULL;
+      
+  if (!This || !This->m_pMedia || !This->m_pMedia->vt) {
+    asprintf (&local_error, "invalid reference to the DMO object %p", This);
+    goto beach;
+  }
+  
+  hr = This->m_pMedia->vt->Flush (This->m_pMedia);
+  if (hr != S_OK) {
+    asprintf (&local_error, "error when sending flush: 0x%lx", hr);
+    goto beach;
+  }
+  
+beach:
+  if (error_message && local_error) {
+    *error_message = local_error;
+    return FALSE;
+  }
+  return TRUE;   
+}
+
 int DMO_Filter_SetProperty (DMO_Filter * This, const WCHAR * name,
                             VARIANT * value, char ** error_message)
 {
@@ -525,7 +549,7 @@ beach:
 }
 
 DMO_Filter * DMO_Filter_Create (const char * dllname, const GUID* id,
-			                          unsigned long * input_pins,
+                                unsigned long * input_pins,
                                 unsigned long * output_pins,
                                 char ** error_message)
 {
