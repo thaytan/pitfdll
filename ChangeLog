@@ -1,3 +1,8 @@
+2006-03-12  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_chain): Fix Speech codec
+	mime type and debug output. We now use audio/x-wms.
+
 2006-01-19  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_sink_event):

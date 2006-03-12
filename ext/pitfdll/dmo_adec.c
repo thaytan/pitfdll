@@ -292,10 +292,11 @@ dmo_audiodec_chain (GstPad * pad, GstBuffer * buffer)
                                           GST_BUFFER_SIZE (buffer),
                                           &read);
   
-  GST_DEBUG ("read %d out of %d, time %llu duration %llu", read,
+  GST_DEBUG ("read %d out of %d, time %" GST_TIME_FORMAT " duration %" \
+             GST_TIME_FORMAT, read,
              GST_BUFFER_SIZE (buffer),
-             GST_BUFFER_TIMESTAMP (buffer),
-             GST_BUFFER_DURATION (buffer));
+             GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)),
+             GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)));
   
   if (!dec->out_buffer) {
     ret = gst_pad_alloc_buffer (dec->srcpad, GST_BUFFER_OFFSET_NONE,
@@ -324,8 +325,11 @@ dmo_audiodec_chain (GstPad * pad, GstBuffer * buffer)
                            &wrote,
                            &(GST_BUFFER_TIMESTAMP (dec->out_buffer)),
                            &(GST_BUFFER_DURATION (dec->out_buffer)))) == TRUE) {
-      GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
-                 wrote, GST_BUFFER_TIMESTAMP (dec->out_buffer), GST_BUFFER_DURATION (dec->out_buffer));
+      GST_DEBUG ("there is another output buffer to collect, pushing %d " \
+                 "bytes timestamp %" GST_TIME_FORMAT " duration %" \
+                 GST_TIME_FORMAT, wrote,
+                 GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (dec->out_buffer)),
+                 GST_TIME_ARGS (GST_BUFFER_DURATION (dec->out_buffer)));
       GST_BUFFER_SIZE (dec->out_buffer) = wrote;
       ret = gst_pad_push (dec->srcpad, dec->out_buffer);
       dec->out_buffer = gst_buffer_new_and_alloc (dec->out_buffer_size);
@@ -333,9 +337,10 @@ dmo_audiodec_chain (GstPad * pad, GstBuffer * buffer)
       GST_BUFFER_TIMESTAMP (dec->out_buffer) = timestamp;
       GST_BUFFER_DURATION (dec->out_buffer) = 0;
     }
-    GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
-               GST_BUFFER_TIMESTAMP (dec->out_buffer),
-               GST_BUFFER_DURATION (dec->out_buffer));
+    GST_DEBUG ("pushing %d bytes timestamp %" GST_TIME_FORMAT " duration %" \
+               GST_TIME_FORMAT, wrote,
+               GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (dec->out_buffer)),
+               GST_TIME_ARGS (GST_BUFFER_DURATION (dec->out_buffer)));
     GST_BUFFER_SIZE (dec->out_buffer) = wrote;
     ret = gst_pad_push (dec->srcpad, dec->out_buffer);
     dec->out_buffer = NULL;
@@ -443,7 +448,7 @@ static const CodecEntry codecs[] = {
   { "wmspdmod", { 0x874131CB, 0x4ecc, 0x443b,
 		  0x89, 0x48, 0x74, 0x6b, 0x89, 0x59, 0x5d, 0x20 },
     0x0000000a, 1, "Windows Media Speech",
-    "audio/x-wmsp",
+    "audio/x-wms",
     "audio/x-raw-int, " \
     "width = (int) 16, depth = (int) 16, " \
     "signed = (boolean) true, endianness = (int) 1234" },
