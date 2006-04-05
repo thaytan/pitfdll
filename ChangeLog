@@ -1,3 +1,23 @@
+2006-04-05  Julien MOUTTE  <julien@moutte.net>
+
+	Patch by: Fabrizio Gennari <fabrizio.ge@tiscali.it>
+
+	* .cvsignore:
+	* ext/.cvsignore:
+	* ext/pitfdll/.cvsignore:
+	* ext/pitfdll/dshow_vdec.c:
+	* gst-libs/.cvsignore:
+	* gst-libs/ext/.cvsignore:
+	* gst-libs/ext/loader/.cvsignore:
+	* gst-libs/ext/loader/dmo/.cvsignore:
+	* gst-libs/ext/loader/dshow/.cvsignore:
+	* gst-libs/ext/loader/dshow/DS_VideoDecoder.c:
+	(DS_VideoDecoder_StartInternal):
+	* gst-libs/ext/loader/qtx/.cvsignore:
+	* gst-libs/ext/loader/qtx/qtxsdk/.cvsignore:
+	* gst-libs/ext/loader/wine/.cvsignore: Adding cvs ignore files,
+	and add support for Indeo 4 videos.
+
 2006-03-12  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_chain): Fix Speech codec

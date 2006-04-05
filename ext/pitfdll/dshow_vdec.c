@@ -339,6 +339,11 @@ static const CodecEntry codecs[] = {
     GST_MAKE_FOURCC ('I', 'V', '5', '0'), 5, "Indeo Video",
     "video/x-intel, ivversion=(int)5",
     NULL },
+  { "ir41_32", { 0x31345649, 0x0000, 0x0010,
+                 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 },
+    GST_MAKE_FOURCC ('I', 'V', '4', '1'), 4, "Indeo Video",
+    "video/x-indeo, indeoversion=(int)4",
+    NULL },
   { NULL }
 };
 
