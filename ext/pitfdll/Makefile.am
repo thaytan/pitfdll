@@ -1,7 +1,7 @@
 plugin_LTLIBRARIES = libpitfdll.la
 
 INCLUDES = \
-	-DWIN32_PATH=\"/usr/lib/win32\" \
+	-DWIN32_PATH=\"@dlldir@\" \
 	-I$(top_srcdir)/gst-libs/ext/loader/dmo \
 	-I$(top_srcdir)/gst-libs/ext/loader/dshow \
 	-I$(top_srcdir)/gst-libs/ext/loader/wine

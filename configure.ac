@@ -68,6 +68,13 @@ if test "x$HAVE_GST" = "xno"; then
   AC_MSG_ERROR(no GStreamer found)
 fi
 
+dnl =========================== win32 dll dir =================================
+
+AC_ARG_WITH([dlldir],
+   AC_HELP_STRING([--with-dlldir=DIR], [look for DLLs in DIR, default=LIBDIR/win32]),
+   [dlldir="$withval"], [dlldir="\$(libdir)/win32"])
+AC_SUBST(dlldir)
+
 dnl ============================= gst plug-ins ================================
 
 plugindir="\$(libdir)/gstreamer-$GST_MAJORMINOR"

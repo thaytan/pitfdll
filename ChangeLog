@@ -1,3 +1,10 @@
+2006-04-21  Julien MOUTTE  <julien@moutte.net>
+
+	Patch by: Jens Granseuer <jensgr@gmx.net>
+
+	* configure.ac:
+	* ext/pitfdll/Makefile.am: Add --with-dlldir to configure.
+
 2006-04-05  Julien MOUTTE  <julien@moutte.net>
 
 	Patch by: Fabrizio Gennari <fabrizio.ge@tiscali.it>
