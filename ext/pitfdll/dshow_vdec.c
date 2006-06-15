@@ -274,9 +274,13 @@ dshow_videodec_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_NULL_TO_READY:
       dec->ldt_fs = Setup_LDT_Keeper ();
       break;
-    case GST_STATE_CHANGE_READY_TO_NULL:
-      Restore_LDT_Keeper (dec->ldt_fs);
+    default:
       break;
+  }
+
+  res = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+
+  switch (transition) {
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       if (dec->ctx) {
         Check_FS_Segment ();
@@ -284,12 +288,12 @@ dshow_videodec_change_state (GstElement * element, GstStateChange transition)
         dec->ctx = NULL;
       }
       break;
+    case GST_STATE_CHANGE_READY_TO_NULL:
+      Restore_LDT_Keeper (dec->ldt_fs);
+      break;
     default:
       break;
   }
-
-  res = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
-
   return res;
 }
 
@@ -302,7 +306,7 @@ dshow_videodec_sink_event (GstPad * pad, GstEvent * event)
   dec = (DSVideoDec *) gst_pad_get_parent (pad);
 
   switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_FLUSH_START:
+    case GST_EVENT_FLUSH_STOP:
       GST_DEBUG ("flush ! implement me !");
       break;
     case GST_EVENT_NEWSEGMENT:

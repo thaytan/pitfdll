@@ -232,7 +232,7 @@ qt_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
       !gst_structure_get_int (s, "samplesize", &samplesize))
     goto failed;
   if ((v = gst_structure_get_value (s, "codec_data")))
-    extradata = g_value_get_boxed (v);
+    extradata = gst_value_get_buffer (v);
 
   /* set up dll initialization */
   memset (&input, 0, sizeof (input));
@@ -304,17 +304,17 @@ qt_audiodec_chain (GstPad * pad, GstBuffer * buffer)
 {
   GstFlowReturn ret;
   QtAudioDec *dec = (QtAudioDec *) gst_pad_get_parent (pad);
-  GstBuffer *in, *out;
+  GstBuffer *out;
   guint8 *data;
   gint size;
   GstClockTime time;
 
   g_mutex_lock (dec->lock);
 
-  /* merge */
+  /* join */
   time = GST_BUFFER_TIMESTAMP (buffer);
   if (dec->cache) {
-    in = gst_buffer_merge (dec->cache, buffer);
+    buffer = gst_buffer_join (dec->cache, buffer);
     dec->cache = NULL;
   }
   data = GST_BUFFER_DATA (buffer);
@@ -363,9 +363,9 @@ qt_audiodec_chain (GstPad * pad, GstBuffer * buffer)
 
   /* keep */
   if (size) {
-    dec->cache = gst_buffer_create_sub (in, GST_BUFFER_SIZE (in) - size, size);
+    dec->cache = gst_buffer_create_sub (buffer, GST_BUFFER_SIZE (buffer) - size, size);
   }
-  gst_buffer_unref (in);
+  gst_buffer_unref (buffer);
 
   g_mutex_unlock (dec->lock);
   
@@ -428,18 +428,13 @@ qt_audiodec_change_state (GstElement * element, GstStateChange transition)
       GST_DEBUG ("Found all addies");
       g_mutex_unlock (dec->lock);
       break;
-    failed:
-      g_mutex_unlock (dec->lock);
-      return GST_STATE_CHANGE_FAILURE;
-    case GST_STATE_CHANGE_READY_TO_NULL:
-      g_mutex_lock (dec->lock);
-      Check_FS_Segment ();
-      //FreeLibrary (dec->qts);
-      FreeLibrary (dec->dll);
-      dec->dll = NULL;
-      Restore_LDT_Keeper (dec->ldt_fs);
-      g_mutex_unlock (dec->lock);
+    default:
       break;
+  }
+
+  res = parent_class->change_state (element, transition);
+
+  switch (transition) {
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       g_mutex_lock (dec->lock);
       Check_FS_Segment ();
@@ -456,11 +451,27 @@ qt_audiodec_change_state (GstElement * element, GstStateChange transition)
       }
       g_mutex_unlock (dec->lock);
       break;
+    case GST_STATE_CHANGE_READY_TO_NULL:
+      g_mutex_lock (dec->lock);
+      Check_FS_Segment ();
+      //FreeLibrary (dec->qts);
+      FreeLibrary (dec->dll);
+      dec->dll = NULL;
+      Restore_LDT_Keeper (dec->ldt_fs);
+      g_mutex_unlock (dec->lock);
+      break;
     default:
       break;
   }
 
-  return parent_class->change_state (element, transition);
+  return res;
+
+  /* ERRORS */
+failed:
+  {
+    g_mutex_unlock (dec->lock);
+    return GST_STATE_CHANGE_FAILURE;
+  }
 }
 
 static gboolean
@@ -473,6 +484,7 @@ qt_audiodec_sink_event (GstPad * pad, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_START:
+      res = gst_pad_event_default (pad, event);
       GST_DEBUG ("flush ! implement me !");
       break;
     case GST_EVENT_NEWSEGMENT:

@@ -1,3 +1,21 @@
+2006-05-15  Wim Taymans  <wim@fluendo.com>
+
+      * ext/pitfdll/dmo_adec.c: (dmo_audiodec_change_state):
+      * ext/pitfdll/dmo_aenc.c: (dmo_audioenc_change_state),
+      (dmo_audioenc_sink_event):
+      * ext/pitfdll/dmo_vdec.c: (dmo_videodec_change_state):
+      * ext/pitfdll/dmo_venc.c: (dmo_videoenc_change_state),
+      (dmo_videoenc_sink_event):
+      * ext/pitfdll/dshow_vdec.c: (dshow_videodec_change_state),
+      (dshow_videodec_sink_event):
+      * ext/pitfdll/qt_adec.c: (qt_audiodec_sink_setcaps),
+      (qt_audiodec_chain), (qt_audiodec_change_state),
+      (qt_audiodec_sink_event):
+      Fix state changes.
+      Pass on flush event in qt audio decoder.
+      Use right function to get contents f codec_data in qt
+      audio.
+
 2006-04-21  Julien MOUTTE  <julien@moutte.net>
 
 	Patch by: Jens Granseuer <jensgr@gmx.net>

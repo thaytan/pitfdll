@@ -476,9 +476,13 @@ dmo_videoenc_change_state (GstElement * element, GstStateChange transition)
     case GST_STATE_CHANGE_NULL_TO_READY:
       enc->ldt_fs = Setup_LDT_Keeper ();
       break;
-    case GST_STATE_CHANGE_READY_TO_NULL:
-      Restore_LDT_Keeper (enc->ldt_fs);
+    default:
       break;
+  }
+
+  res =  GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+
+  switch (transition) {
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       if (enc->ctx) {
         Check_FS_Segment ();
@@ -486,12 +490,12 @@ dmo_videoenc_change_state (GstElement * element, GstStateChange transition)
         enc->ctx = NULL;
       }
       break;
+    case GST_STATE_CHANGE_READY_TO_NULL:
+      Restore_LDT_Keeper (enc->ldt_fs);
+      break;
     default:
       break;
   }
-
-  res =  GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
-
   return res;
 }
 
@@ -505,7 +509,7 @@ dmo_videoenc_sink_event (GstPad * pad, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_START:
-      GST_DEBUG ("flush ! implement me !");
+      res = gst_pad_event_default (pad, event);
       break;
     default:
       res = gst_pad_event_default (pad, event);
