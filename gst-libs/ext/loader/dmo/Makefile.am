@@ -9,6 +9,9 @@ libdmo_la_SOURCES = \
 	dmo.c \
 	dmo_guids.c
 
+libdmo_la_CFLAGS = $(GST_CFLAGS)
+libdmo_la_LIBADD = $(GST_LIBS)
+
 noinst_HEADERS = \
 	DMO_AudioDecoder.h \
 	DMO_AudioEncoder.h \

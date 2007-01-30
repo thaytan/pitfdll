@@ -1,3 +1,11 @@
+2007-01-30  Julien MOUTTE  <julien@moutte.net>
+
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.c:
+	(DMO_VideoEncoder_Open): Fix average time per frame 
+	calculation.
+	* gst-libs/ext/loader/dmo/Makefile.am: Use gst_util
+	functions.
+
 2006-08-21  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_venc.c: We want I420, nothing else

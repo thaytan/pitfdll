@@ -21,6 +21,8 @@
 
 #include "DMO_VideoEncoder.h"
 
+#include <gst/gst.h>
+
 struct _DMO_VideoEncoder {
   DMO_Filter * m_pDMO_Filter;
   
@@ -148,7 +150,9 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   this->m_sVhdr->bmiHeader.biSizeImage = format->biWidth * format->biHeight * format->biBitCount / 8;
 
   this->m_sVhdr->dwBitRate = fps_n / fps_d * this->m_sVhdr->bmiHeader.biSizeImage * 8;
-  this->m_sVhdr->AvgTimePerFrame = 10000000 / fps_n / fps_d;
+  this->m_sVhdr->AvgTimePerFrame = gst_util_uint64_scale_int (10000000,
+      fps_d, fps_n);
+  
   this->m_sVhdr->rcSource.left = this->m_sVhdr->rcSource.top = 0;
   this->m_sVhdr->rcSource.right = this->m_sVhdr->bmiHeader.biWidth;
   this->m_sVhdr->rcSource.bottom = this->m_sVhdr->bmiHeader.biHeight;
@@ -206,7 +210,8 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
   else
     this->m_sVhdr2->dwBitRate = bitrate;
   this->m_sVhdr2->dwBitErrorRate = 0;
-  this->m_sVhdr2->AvgTimePerFrame = 10000000 / fps_n / fps_d;
+  this->m_sVhdr2->AvgTimePerFrame = gst_util_uint64_scale_int (10000000,
+      fps_d, fps_n);
   
   memset (&this->m_sDestType, 0, sizeof (this->m_sDestType));
   
