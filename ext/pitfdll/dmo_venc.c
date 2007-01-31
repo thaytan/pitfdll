@@ -306,9 +306,8 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   }
   else {
     if (!(enc->ctx = DMO_VideoEncoder_Open (dll, &(klass->entry->guid), hdr, 
-                                            klass->entry->format, enc->vbr,
-                                            enc->bitrate, enc->fps_n,
-                                            enc->fps_d, &data, &data_length))) {
+        klass->entry->format, enc->vbr, enc->bitrate, enc->fps_n,
+        enc->fps_d, &data, &data_length))) {
       GST_ELEMENT_ERROR (enc, CORE, NEGOTIATION, (NULL),
           ("Failed to open DLL %s", dll));
       g_free (dll);
@@ -319,7 +318,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   g_free (dll);
 
   DMO_VideoEncoder_GetOutputInfos (enc->ctx, &enc->out_buffer_size,
-                                   &enc->out_align);
+      &enc->out_align);
   
   /* negotiate output */
   out = gst_caps_from_string (klass->entry->srccaps);
@@ -383,9 +382,10 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
       GST_BUFFER_TIMESTAMP (buffer), GST_BUFFER_DURATION (buffer),
       GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer), &read);
   
-  GST_DEBUG_OBJECT (enc, "read %d out of %d, time %llu duration %llu", read,
-      GST_BUFFER_SIZE (buffer), GST_BUFFER_TIMESTAMP (buffer),
-      GST_BUFFER_DURATION (buffer));
+  GST_DEBUG_OBJECT (enc, "read %d out of %d, time %" GST_TIME_FORMAT \
+      " duration %" GST_TIME_FORMAT, read,
+      GST_BUFFER_SIZE (buffer),  GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)));
   
   if (!enc->out_buffer) {
     ret = gst_pad_alloc_buffer (enc->srcpad, GST_BUFFER_OFFSET_NONE,
