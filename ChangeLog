@@ -1,3 +1,9 @@
+2007-01-31  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_sink_setcaps),
+	(dmo_videoenc_chain): Port debug messages and errors
+	to 0.10.
+
 2007-01-30  Julien MOUTTE  <julien@moutte.net>
 
 	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.c:

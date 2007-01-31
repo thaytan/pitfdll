@@ -282,23 +282,23 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
     if (!gst_structure_get_int (s, "bpp", &bpp))
       goto beach;
     hdr->bit_cnt = bpp;
-    GST_DEBUG ("Using RGB%d", hdr->bit_cnt);
+    GST_DEBUG_OBJECT (enc, "Using RGB%d", hdr->bit_cnt);
     hdr->compression = 0;
   }
   /* else if (gst_structure_has_name (s, "video/x-raw-yuv")) {*/
   else if (strcmp (structure_name, "video/x-raw-yuv") == 0) {
     if (!gst_structure_get_fourcc (s, "format", (guint32 *) &hdr->compression))
       goto beach;
-    GST_DEBUG ("Using YUV with fourcc");
+    GST_DEBUG_OBJECT (enc, "Using YUV with fourcc");
   }
-  GST_DEBUG ("Will now open %s using %dx%d@%d/%dfps",
-	           dll, enc->w, enc->h, enc->fps_n, enc->fps_d);
+  GST_DEBUG_OBJECT (enc, "Will now open %s using %dx%d@%d/%dfps",
+      dll, enc->w, enc->h, enc->fps_n, enc->fps_d);
   if (enc->vbr) {
     if (!(enc->ctx = DMO_VideoEncoder_Open (dll, &(klass->entry->guid), hdr, 
-                                            klass->entry->format, enc->vbr,
-                                            enc->quality, enc->fps_n,
-                                            enc->fps_d, &data, &data_length))) {
-      GST_ERROR ("Failed to open DLL %s", dll);
+        klass->entry->format, enc->vbr, enc->quality, enc->fps_n,
+        enc->fps_d, &data, &data_length))) {
+      GST_ELEMENT_ERROR (enc, CORE, NEGOTIATION, (NULL), 
+          ("Failed to open DLL %s", dll));
       g_free (dll);
       g_free (hdr);
       goto beach;
@@ -309,7 +309,8 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
                                             klass->entry->format, enc->vbr,
                                             enc->bitrate, enc->fps_n,
                                             enc->fps_d, &data, &data_length))) {
-      GST_ERROR ("Failed to open DLL %s", dll);
+      GST_ELEMENT_ERROR (enc, CORE, NEGOTIATION, (NULL),
+          ("Failed to open DLL %s", dll));
       g_free (dll);
       g_free (hdr);
       goto beach;
@@ -347,7 +348,8 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   
   if (!gst_pad_set_caps (enc->srcpad, out)) {
     gst_caps_unref (out);
-    GST_ERROR ("Failed to negotiate output");
+    GST_ELEMENT_ERROR (enc, CORE, NEGOTIATION, (NULL),
+        ("Failed to negotiate output"));
     goto beach;
   }
   gst_caps_unref (out);
@@ -378,24 +380,19 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
   
   /* encode */
   status = DMO_VideoEncoder_ProcessInput (enc->ctx,
-                                          GST_BUFFER_TIMESTAMP (buffer),
-                                          GST_BUFFER_DURATION (buffer),
-                                          GST_BUFFER_DATA (buffer),
-                                          GST_BUFFER_SIZE (buffer),
-                                          &read);
+      GST_BUFFER_TIMESTAMP (buffer), GST_BUFFER_DURATION (buffer),
+      GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer), &read);
   
-  GST_DEBUG ("read %d out of %d, time %llu duration %llu", read,
-             GST_BUFFER_SIZE (buffer),
-             GST_BUFFER_TIMESTAMP (buffer),
-             GST_BUFFER_DURATION (buffer));
+  GST_DEBUG_OBJECT (enc, "read %d out of %d, time %llu duration %llu", read,
+      GST_BUFFER_SIZE (buffer), GST_BUFFER_TIMESTAMP (buffer),
+      GST_BUFFER_DURATION (buffer));
   
   if (!enc->out_buffer) {
     ret = gst_pad_alloc_buffer (enc->srcpad, GST_BUFFER_OFFSET_NONE,
-                                enc->out_buffer_size, GST_PAD_CAPS (enc->srcpad),
-                                &(enc->out_buffer));
+        enc->out_buffer_size, GST_PAD_CAPS (enc->srcpad), &(enc->out_buffer));
     if (ret != GST_FLOW_OK) {
-      GST_DEBUG ("failed allocating a buffer of %d bytes from pad %p",
-                 enc->out_buffer_size, enc->srcpad);
+      GST_DEBUG_OBJECT (enc, "failed allocating a buffer of %d bytes " \
+          "from pad %p", enc->out_buffer_size, enc->srcpad);
       goto beach;
     }
     /* If the DMO can not set the timestamp we do our best guess */
@@ -408,21 +405,20 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
   if (status == FALSE) {
     gboolean key_frame = FALSE;
     GstClockTime timestamp = GST_BUFFER_TIMESTAMP (enc->out_buffer);
-    GST_DEBUG ("we have some output buffers to collect (size is %d)",
-               GST_BUFFER_SIZE (enc->out_buffer));
+    GST_DEBUG_OBJECT (enc, "we have some output buffers to collect " \
+        "(size is %d)", GST_BUFFER_SIZE (enc->out_buffer));
     /* Loop until the last buffer (returns FALSE) */
     while ((status = DMO_VideoEncoder_ProcessOutput (enc->ctx,
-                           GST_BUFFER_DATA (enc->out_buffer),
-                           GST_BUFFER_SIZE (enc->out_buffer),
-                           &wrote,
-                           &(GST_BUFFER_TIMESTAMP (enc->out_buffer)),
-                           &(GST_BUFFER_DURATION (enc->out_buffer)),
-                           &key_frame)) == TRUE) {
+        GST_BUFFER_DATA (enc->out_buffer), GST_BUFFER_SIZE (enc->out_buffer),
+        &wrote,
+        &(GST_BUFFER_TIMESTAMP (enc->out_buffer)),
+        &(GST_BUFFER_DURATION (enc->out_buffer)), &key_frame)) == TRUE) {
       if (wrote) {
-        GST_DEBUG ("there is another output buffer to collect, pushing %d " \
-                   "bytes timestamp %llu duration %llu", wrote,
-                   GST_BUFFER_TIMESTAMP (enc->out_buffer),
-                   GST_BUFFER_DURATION (enc->out_buffer));
+        GST_DEBUG_OBJECT (enc, "there is another output buffer to collect, " \
+            "pushing %d bytes timestamp %" GST_TIME_FORMAT " duration %" \
+            GST_TIME_FORMAT, wrote,
+            GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (enc->out_buffer)),
+            GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)));
         GST_BUFFER_SIZE (enc->out_buffer) = wrote;
         if (!key_frame) {
           GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
@@ -441,9 +437,10 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
       GST_BUFFER_DURATION (enc->out_buffer) = 0;
     }
     if (wrote) {
-      GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
-                 GST_BUFFER_TIMESTAMP (enc->out_buffer),
-                 GST_BUFFER_DURATION (enc->out_buffer));
+      GST_DEBUG_OBJECT (enc,  "pushing %d bytes timestamp %" GST_TIME_FORMAT \
+          " duration %" GST_TIME_FORMAT, wrote,
+          GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (enc->out_buffer)),
+          GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)));
       GST_BUFFER_SIZE (enc->out_buffer) = wrote;
       if (!key_frame) {
         GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
