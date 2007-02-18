@@ -1,3 +1,10 @@
+2007-02-17  Tim-Philipp Muller <t.i.m@zen.co.uk>
+
+	reviewed by: Ronald S. Bultje <rbultje@gnome.org>
+
+	* ext/pitfdll/dshow_vdec.c: (dshow_videodec_sink_setcaps):
+	  Don't use a var after g_free()ing it (#1517002).
+
 2007-01-31  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_sink_setcaps),

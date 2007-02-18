@@ -203,10 +203,10 @@ dshow_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
              dll, dec->w, dec->h, dec->fps_n, dec->fps_d);
   if (!(dec->ctx = DS_VideoDecoder_Open (dll, &klass->entry->guid,
                                          hdr, 0, 0))) {
+    GST_ERROR ("Failed to open DLL %s", dll);
     g_free (dll);
     g_free (hdr);
-    GST_ERROR ("Failed to open DLL %s", dll);
-    return GST_PAD_LINK_REFUSED;
+    return FALSE;
   }
   g_free (dll);
   g_free (hdr);
