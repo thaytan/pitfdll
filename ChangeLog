@@ -1,3 +1,13 @@
+2007-03-12  Julien MOUTTE  <julien@moutte.net>
+
+	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_init),
+	(dmo_videoenc_chain): Make the encoder detect stream
+	discontinuity. It will then insert a keyframe, push a 
+	DISCONT buffer and put a gap in the buffer offset.
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.c:
+	(DMO_VideoEncoder_Flush): Introduce a flush method.
+	* gst-libs/ext/loader/dmo/DMO_VideoEncoder.h:
+
 2007-02-17  Tim-Philipp Muller <t.i.m@zen.co.uk>
 
 	reviewed by: Ronald S. Bultje <rbultje@gnome.org>

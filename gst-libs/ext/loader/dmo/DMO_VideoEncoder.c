@@ -336,6 +336,13 @@ void DMO_VideoEncoder_Destroy (DMO_VideoEncoder * this)
   }
 }
 
+void DMO_VideoEncoder_Flush (DMO_VideoEncoder * this)
+{
+  char * error_message = NULL;
+  
+  DMO_Filter_Flush (this->m_pDMO_Filter, &error_message);
+}
+
 int DMO_VideoEncoder_ProcessInput (DMO_VideoEncoder * this,
                                    unsigned long long timestamp,
                                    unsigned long long duration,

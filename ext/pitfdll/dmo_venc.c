@@ -34,6 +34,10 @@ typedef struct _DMOVideoEnc {
   GstPad *srcpad, *sinkpad;
   
   GstBuffer *out_buffer;
+  
+  guint64 offset;
+  gboolean need_discont;
+  GstClockTime expected_ts;
 
   /* settings */
   gint w, h;
@@ -169,6 +173,8 @@ dmo_videoenc_init (DMOVideoEnc * enc)
 
   enc->ctx = NULL;
   enc->out_buffer = NULL;
+  
+  enc->offset = 0;
   
   enc->vbr = FALSE;
   enc->quality = 0;
@@ -377,20 +383,38 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
     goto beach;
   }
   
+  /* Check for stream discontinuity */
+  if (GST_CLOCK_TIME_IS_VALID (enc->expected_ts) &&
+      GST_BUFFER_TIMESTAMP (buffer) != enc->expected_ts) {
+    GST_WARNING_OBJECT (enc, "unexpected buffer timestamp %" GST_TIME_FORMAT \
+        " (expecting %" GST_TIME_FORMAT ") video discontinuity",
+        GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)),
+        GST_TIME_ARGS (enc->expected_ts));
+    /* Put a gap in the offset */
+    enc->offset++;
+    /* Flush encoder to generate a key frame */
+    DMO_VideoEncoder_Flush (enc->ctx);
+    enc->need_discont = TRUE;
+  }
+  
+  /* Calculate the next expected timestamp */
+  enc->expected_ts =
+      GST_BUFFER_TIMESTAMP (buffer) + GST_BUFFER_DURATION (buffer);
+  
   /* encode */
   status = DMO_VideoEncoder_ProcessInput (enc->ctx,
       GST_BUFFER_TIMESTAMP (buffer), GST_BUFFER_DURATION (buffer),
       GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer), &read);
   
   GST_DEBUG_OBJECT (enc, "read %d out of %d, time %" GST_TIME_FORMAT \
-      " duration %" GST_TIME_FORMAT, read,
+      " duration %" GST_TIME_FORMAT ", offset %" G_GUINT64_FORMAT, read,
       GST_BUFFER_SIZE (buffer),  GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)),
-      GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)));
+      GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)), GST_BUFFER_OFFSET (buffer));
   
   if (!enc->out_buffer) {
     ret = gst_pad_alloc_buffer (enc->srcpad, GST_BUFFER_OFFSET_NONE,
         enc->out_buffer_size, GST_PAD_CAPS (enc->srcpad), &(enc->out_buffer));
-    if (ret != GST_FLOW_OK) {
+    if (G_UNLIKELY (ret != GST_FLOW_OK)) {
       GST_DEBUG_OBJECT (enc, "failed allocating a buffer of %d bytes " \
           "from pad %p", enc->out_buffer_size, enc->srcpad);
       goto beach;
@@ -410,16 +434,21 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
     /* Loop until the last buffer (returns FALSE) */
     while ((status = DMO_VideoEncoder_ProcessOutput (enc->ctx,
         GST_BUFFER_DATA (enc->out_buffer), GST_BUFFER_SIZE (enc->out_buffer),
-        &wrote,
-        &(GST_BUFFER_TIMESTAMP (enc->out_buffer)),
+        &wrote, &(GST_BUFFER_TIMESTAMP (enc->out_buffer)),
         &(GST_BUFFER_DURATION (enc->out_buffer)), &key_frame)) == TRUE) {
       if (wrote) {
+        GST_BUFFER_SIZE (enc->out_buffer) = wrote;
+        GST_BUFFER_OFFSET (enc->out_buffer) = enc->offset++;
+        GST_BUFFER_OFFSET_END (enc->out_buffer) = enc->offset; 
         GST_DEBUG_OBJECT (enc, "there is another output buffer to collect, " \
             "pushing %d bytes timestamp %" GST_TIME_FORMAT " duration %" \
-            GST_TIME_FORMAT, wrote,
+            GST_TIME_FORMAT " offset %" G_GUINT64_FORMAT " keyframe %d", wrote,
             GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (enc->out_buffer)),
-            GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)));
-        GST_BUFFER_SIZE (enc->out_buffer) = wrote;
+            GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)),
+            GST_BUFFER_OFFSET (enc->out_buffer), key_frame);
+        if (G_UNLIKELY (enc->need_discont)) {
+          GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DISCONT);
+        }
         if (!key_frame) {
           GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
         }
@@ -431,17 +460,30 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
       else {
         gst_buffer_unref (enc->out_buffer);
       }
-      enc->out_buffer = gst_buffer_new_and_alloc (enc->out_buffer_size);
+      ret = gst_pad_alloc_buffer (enc->srcpad, GST_BUFFER_OFFSET_NONE,
+          enc->out_buffer_size, GST_PAD_CAPS (enc->srcpad), &(enc->out_buffer));
+      if (G_UNLIKELY (ret != GST_FLOW_OK)) {
+        GST_DEBUG_OBJECT (enc, "failed allocating a buffer of %d bytes " \
+           "from pad %p", enc->out_buffer_size, enc->srcpad);
+        goto beach;
+      }
       /* If the DMO can not set the timestamp we do our best guess */
       GST_BUFFER_TIMESTAMP (enc->out_buffer) = timestamp;
       GST_BUFFER_DURATION (enc->out_buffer) = 0;
     }
     if (wrote) {
-      GST_DEBUG_OBJECT (enc,  "pushing %d bytes timestamp %" GST_TIME_FORMAT \
-          " duration %" GST_TIME_FORMAT, wrote,
-          GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (enc->out_buffer)),
-          GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)));
       GST_BUFFER_SIZE (enc->out_buffer) = wrote;
+      GST_BUFFER_OFFSET (enc->out_buffer) = enc->offset++;
+      GST_BUFFER_OFFSET_END (enc->out_buffer) = enc->offset;
+      GST_DEBUG_OBJECT (enc,  "pushing %d bytes timestamp %" GST_TIME_FORMAT \
+          " duration %" GST_TIME_FORMAT " offset %" G_GUINT64_FORMAT \
+          " keyframe %d", wrote,
+          GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (enc->out_buffer)),
+          GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)),
+          GST_BUFFER_OFFSET (enc->out_buffer), key_frame);
+      if (G_UNLIKELY (enc->need_discont)) {
+        GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DISCONT);
+      }
       if (!key_frame) {
         GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
       }

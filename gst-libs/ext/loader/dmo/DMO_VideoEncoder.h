@@ -14,6 +14,8 @@ DMO_VideoEncoder * DMO_VideoEncoder_Open (char * dllname, GUID * guid,
 
 void DMO_VideoEncoder_Destroy (DMO_VideoEncoder * this);
 
+void DMO_VideoEncoder_Flush (DMO_VideoEncoder * this);
+
 int DMO_VideoEncoder_GetOutputInfos (DMO_VideoEncoder * this, 
                                      unsigned long * out_buffer_size,
                                      unsigned long * out_align);
