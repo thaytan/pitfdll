@@ -45,6 +45,7 @@ typedef struct _DMOVideoEnc {
   gint quality;
   gint bitrate;
   gint fps_n, fps_d;
+  gint aspect_x, aspect_y;
   
   void *ctx;
   gulong out_buffer_size;
@@ -248,7 +249,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   char * data = NULL, * dll = NULL;
   unsigned long data_length = 0;
   GstBuffer * extradata = NULL;
-  const GValue *fps;
+  const GValue *fps, *par;
   gboolean ret = FALSE;
   
   
@@ -269,9 +270,17 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (!fps) {
     goto beach;
   }
+  par = gst_structure_get_value (s, "pixel-aspect-ratio");
   
   enc->fps_n = gst_value_get_fraction_numerator (fps);
   enc->fps_d = gst_value_get_fraction_denominator (fps);
+  if (par) {
+    enc->aspect_x = gst_value_get_fraction_numerator (par);
+    enc->aspect_y = gst_value_get_fraction_denominator (par);
+  }
+  else {
+    enc->aspect_x = enc->aspect_y = 1;
+  }
 
   /* set up dll initialization */
   dll = g_strdup_printf ("%s.dll", klass->entry->dll);
@@ -338,6 +347,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       "framerate", GST_TYPE_FRACTION, enc->fps_n, enc->fps_d,
       "bitrate", G_TYPE_INT, enc->bitrate,
       "bpp", G_TYPE_INT, hdr->bit_cnt,
+      "pixel-aspect-ratio", GST_TYPE_FRACTION, enc->aspect_x, enc->aspect_y,
       "codec_data", GST_TYPE_BUFFER, extradata, NULL);
   }
   else {
@@ -346,6 +356,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
       "height", G_TYPE_INT, enc->h,
       "bitrate", G_TYPE_INT, enc->bitrate,
       "bpp", G_TYPE_INT, hdr->bit_cnt,
+      "pixel-aspect-ratio", GST_TYPE_FRACTION, enc->aspect_x, enc->aspect_y,
       "framerate", GST_TYPE_FRACTION, enc->fps_n, enc->fps_d, NULL);
   }
   
