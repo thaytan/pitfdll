@@ -371,6 +371,7 @@ dmo_videoenc_sink_setcaps (GstPad * pad, GstCaps * caps)
   gst_caps_unref (out);
   
   ret = TRUE;
+  enc->need_discont = TRUE;
   
 beach:
   gst_object_unref (enc);
@@ -417,7 +418,7 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
       GST_BUFFER_TIMESTAMP (buffer), GST_BUFFER_DURATION (buffer),
       GST_BUFFER_DATA (buffer), GST_BUFFER_SIZE (buffer), &read);
   
-  GST_DEBUG_OBJECT (enc, "read %d out of %d, time %" GST_TIME_FORMAT \
+  GST_LOG_OBJECT (enc, "read %d out of %d, time %" GST_TIME_FORMAT \
       " duration %" GST_TIME_FORMAT ", offset %" G_GUINT64_FORMAT, read,
       GST_BUFFER_SIZE (buffer),  GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)), GST_BUFFER_OFFSET (buffer));
@@ -426,7 +427,7 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
     ret = gst_pad_alloc_buffer (enc->srcpad, GST_BUFFER_OFFSET_NONE,
         enc->out_buffer_size, GST_PAD_CAPS (enc->srcpad), &(enc->out_buffer));
     if (G_UNLIKELY (ret != GST_FLOW_OK)) {
-      GST_DEBUG_OBJECT (enc, "failed allocating a buffer of %d bytes " \
+      GST_WARNING_OBJECT (enc, "failed allocating a buffer of %d bytes " \
           "from pad %p", enc->out_buffer_size, enc->srcpad);
       goto beach;
     }
@@ -440,7 +441,7 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
   if (status == FALSE) {
     gboolean key_frame = FALSE;
     GstClockTime timestamp = GST_BUFFER_TIMESTAMP (enc->out_buffer);
-    GST_DEBUG_OBJECT (enc, "we have some output buffers to collect " \
+    GST_LOG_OBJECT (enc, "we have some output buffers to collect " \
         "(size is %d)", GST_BUFFER_SIZE (enc->out_buffer));
     /* Loop until the last buffer (returns FALSE) */
     while ((status = DMO_VideoEncoder_ProcessOutput (enc->ctx,
@@ -451,14 +452,16 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
         GST_BUFFER_SIZE (enc->out_buffer) = wrote;
         GST_BUFFER_OFFSET (enc->out_buffer) = enc->offset++;
         GST_BUFFER_OFFSET_END (enc->out_buffer) = enc->offset; 
-        GST_DEBUG_OBJECT (enc, "there is another output buffer to collect, " \
+        GST_LOG_OBJECT (enc, "there is another output buffer to collect, " \
             "pushing %d bytes timestamp %" GST_TIME_FORMAT " duration %" \
             GST_TIME_FORMAT " offset %" G_GUINT64_FORMAT " keyframe %d", wrote,
             GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (enc->out_buffer)),
             GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)),
             GST_BUFFER_OFFSET (enc->out_buffer), key_frame);
         if (G_UNLIKELY (enc->need_discont)) {
+          GST_LOG_OBJECT (enc, "mark this buffer with the discont flag");
           GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DISCONT);
+          enc->need_discont = FALSE;
         }
         if (!key_frame) {
           GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
@@ -474,7 +477,7 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
       ret = gst_pad_alloc_buffer (enc->srcpad, GST_BUFFER_OFFSET_NONE,
           enc->out_buffer_size, GST_PAD_CAPS (enc->srcpad), &(enc->out_buffer));
       if (G_UNLIKELY (ret != GST_FLOW_OK)) {
-        GST_DEBUG_OBJECT (enc, "failed allocating a buffer of %d bytes " \
+        GST_WARNING_OBJECT (enc, "failed allocating a buffer of %d bytes " \
            "from pad %p", enc->out_buffer_size, enc->srcpad);
         goto beach;
       }
@@ -486,14 +489,16 @@ dmo_videoenc_chain (GstPad * pad, GstBuffer * buffer)
       GST_BUFFER_SIZE (enc->out_buffer) = wrote;
       GST_BUFFER_OFFSET (enc->out_buffer) = enc->offset++;
       GST_BUFFER_OFFSET_END (enc->out_buffer) = enc->offset;
-      GST_DEBUG_OBJECT (enc,  "pushing %d bytes timestamp %" GST_TIME_FORMAT \
+      GST_LOG_OBJECT (enc,  "pushing %d bytes timestamp %" GST_TIME_FORMAT \
           " duration %" GST_TIME_FORMAT " offset %" G_GUINT64_FORMAT \
           " keyframe %d", wrote,
           GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (enc->out_buffer)),
           GST_TIME_ARGS (GST_BUFFER_DURATION (enc->out_buffer)),
           GST_BUFFER_OFFSET (enc->out_buffer), key_frame);
       if (G_UNLIKELY (enc->need_discont)) {
+        GST_LOG_OBJECT (enc, "mark this buffer with the discont flag");
         GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DISCONT);
+        enc->need_discont = FALSE;
       }
       if (!key_frame) {
         GST_BUFFER_FLAG_SET (enc->out_buffer, GST_BUFFER_FLAG_DELTA_UNIT);
