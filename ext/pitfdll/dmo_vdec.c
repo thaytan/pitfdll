@@ -139,6 +139,7 @@ dmo_videodec_init (DMOVideoDec * dec)
   
   dec->srcpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "src"), "src");
+  gst_pad_use_fixed_caps (dec->srcpad);
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
 
   dec->ctx = NULL;

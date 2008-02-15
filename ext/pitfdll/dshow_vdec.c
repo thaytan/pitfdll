@@ -130,6 +130,7 @@ dshow_videodec_init (DSVideoDec * dec)
   
   dec->srcpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "src"), "src");
+  gst_pad_use_fixed_caps (dec->srcpad);
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
 
   dec->ctx = NULL;
@@ -341,7 +342,7 @@ static const CodecEntry codecs[] = {
   { "ir50_32", { 0x30355649, 0x0000, 0x0010,
 		 0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71 },
     GST_MAKE_FOURCC ('I', 'V', '5', '0'), 5, "Indeo Video",
-    "video/x-intel, ivversion=(int)5",
+    "video/x-indeo, indeoversion=(int)5",
     NULL },
   { "ir41_32", { 0x31345649, 0x0000, 0x0010,
                  0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 },

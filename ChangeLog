@@ -1,3 +1,13 @@
+2008-02-15  Julien Moutte  <julien@moutte.net>
+
+	Patch by : Sebastian Droge <slomo@debian.org>
+
+	* ext/pitfdll/dmo_adec.c: (dmo_audiodec_init):
+	* ext/pitfdll/dmo_vdec.c: (dmo_videodec_init):
+	* ext/pitfdll/dshow_vdec.c: (dshow_videodec_init):
+	* ext/pitfdll/qt_adec.c: (qt_audiodec_init): Make src pads
+	use fixed caps and fix Indeo 5 caps.
+
 2007-03-21  Julien MOUTTE  <julien@moutte.net>
 
 	* ext/pitfdll/dmo_venc.c: (dmo_videoenc_sink_setcaps),
