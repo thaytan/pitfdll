@@ -50,4 +50,4 @@ GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     "pitfdll",
     "DLL-loader elements",
     plugin_init,
-    PITFDLL_VERSION, "GPL", "PitfDLL", "http://ronald.bitfreak.net/pitfdll/")
+    PACKAGE_VERSION, "GPL", "PitfDLL", "http://ronald.bitfreak.net/pitfdll/")

@@ -1,10 +1,10 @@
 noinst_LTLIBRARIES = libloader.la
 
-CCAS = $(CC)
-CCASFLAGS = 
+# CCAS = $(CC)
+AM_CCASFLAGS = 
 
-%.o: %.s
-	$(CC) -c $< -o $@
+# %.o: %.s
+#       $(CC) -c $< -o $@
 
 libloader_la_SOURCES = \
 	ldt_keeper.c \
