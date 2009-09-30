@@ -68,7 +68,6 @@ static GstElementClass *parent_class = NULL;
 /*
  * object lifecycle.
  */
-
 static void
 dmo_videodec_base_init (DMOVideoDecClass * klass)
 {
@@ -170,6 +169,7 @@ dmo_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   GstCaps *out;
   const GValue *fps;
   gboolean ret = FALSE;
+  GUID tmp_guid = klass->entry->guid;
   
   GST_DEBUG_OBJECT (dec, "setcaps called with %" GST_PTR_FORMAT, caps);
 
@@ -215,7 +215,7 @@ dmo_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   hdr->compression = klass->entry->format;
   GST_DEBUG ("Will now open %s using %dx%d@%d/%dfps",
 	     dll, dec->w, dec->h, dec->fps_n, dec->fps_d);
-  if (!(dec->ctx = DMO_VideoDecoder_Open (dll, &klass->entry->guid, hdr))) {
+  if (!(dec->ctx = DMO_VideoDecoder_Open (dll, &tmp_guid, hdr))) {
     GST_ERROR ("Failed to open DLL %s", dll);
     g_free (dll);
     g_free (hdr);
@@ -258,7 +258,7 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
   GstFlowReturn ret = GST_FLOW_OK;
   DMOVideoDec *dec = (DMOVideoDec *) gst_pad_get_parent (pad);
   GstBuffer *in_buffer = NULL;
-  guint read = 0, wrote = 0, status = FALSE;
+  guint read = 0, wrote = 0, status;
 
   Check_FS_Segment ();
 
@@ -276,17 +276,19 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
                                           GST_BUFFER_SIZE (buffer),
                                           &read);
   
-  GST_DEBUG ("read %d out of %d, time %llu duration %llu", read,
-             GST_BUFFER_SIZE (buffer),
-             GST_BUFFER_TIMESTAMP (buffer),
-             GST_BUFFER_DURATION (buffer));
+  GST_DEBUG ("read %d out of %d, result %d time %" GST_TIME_FORMAT " duration %" GST_TIME_FORMAT,
+      read, GST_BUFFER_SIZE (buffer), status,
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)));
   
   if (!dec->out_buffer) {
+    GST_DEBUG ("allocating a buffer of %d bytes from pad %" GST_PTR_FORMAT,
+                 dec->out_buffer_size, dec->srcpad);
     ret = gst_pad_alloc_buffer (dec->srcpad, GST_BUFFER_OFFSET_NONE,
                                 dec->out_buffer_size, GST_PAD_CAPS (dec->srcpad),
                                 &(dec->out_buffer));
     if (ret != GST_FLOW_OK) {
-      GST_DEBUG ("failed allocating a buffer of %d bytes from pad %p",
+      GST_DEBUG ("failed allocating a buffer of %d bytes from pad %" GST_PTR_FORMAT,
                  dec->out_buffer_size, dec->srcpad);
       goto beach;
     }
