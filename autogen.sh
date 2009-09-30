@@ -85,4 +85,4 @@ ${LIBTOOLIZE} --force --copy || exit 1
 ${AUTOCONF} || exit 1
 ${AUTOMAKE} --add-missing --gnu || exit 1
 test -n "$NOCONFIGURE" || \
-  ./configure --enable-maintainer-mode --enable-compile-warnings $@
+  ./configure --enable-maintainer-mode $@
