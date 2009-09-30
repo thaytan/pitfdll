@@ -19,7 +19,7 @@ dnl we cheat here so we don't have to change the actual configure code bit
 GST_PLUGINS_VERSION_NANO=$PITFDLL_VERSION_NANO
 
 dnl required GStreamer version
-GST_REQ=0.9.1
+GST_REQ=0.10.22
 
 AM_INIT_AUTOMAKE([-Wno-portability])
 

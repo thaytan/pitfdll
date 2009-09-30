@@ -32,6 +32,7 @@ plugin_init (GstPlugin * plugin)
 {
   GST_DEBUG_CATEGORY_INIT (pitfdll_debug, "pitfdll", 0, "PitfDLL elements");
 
+  gst_plugin_add_dependency_simple (plugin, NULL, WIN32_PATH, NULL, GST_PLUGIN_DEPENDENCY_FLAG_NONE);
   dshow_vdec_register (plugin);
   dshow_adec_register (plugin);
 
