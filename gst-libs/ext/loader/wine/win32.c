@@ -57,6 +57,10 @@ for DLL to know too much about its environment.
 #include <kstat.h>
 #endif
 
+#ifdef __GSTREAMER__
+#include <gst/gst.h>
+#endif
+
 #if HAVE_VSSCANF
 # ifndef __sun
 /*
@@ -209,12 +213,19 @@ static inline void dbgprintf(char* fmt, ...)
     if (verbose > 2)
     {
 	va_list va;
-	
+
 	va_start(va, fmt);
 //	vprintf(fmt, va);
 	mp_dbg(MSGT_WIN32, MSGL_DBG3, fmt, va);
 	va_end(va);
     }
+#endif
+#ifdef __GSTREAMER__
+	va_list va;
+	
+	va_start(va, fmt);
+        gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_WARNING, "", "", 0, NULL, fmt, va);
+        va_end(va);
 #endif
 }
 

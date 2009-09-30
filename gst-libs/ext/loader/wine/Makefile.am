@@ -1,11 +1,5 @@
 noinst_LTLIBRARIES = libloader.la
 
-# CCAS = $(CC)
-AM_CCASFLAGS = 
-
-# %.o: %.s
-#       $(CC) -c $< -o $@
-
 libloader_la_SOURCES = \
 	ldt_keeper.c \
 	pe_image.c \
@@ -60,6 +54,9 @@ noinst_HEADERS = \
 	winuser.h \
 	wrapper.h
 
+AM_CFLAGS = $(GST_CFLAGS)
+AM_LIBS = $(GST_LIBS)
+
 # gcc-3.0 produces buggy code for acmStreamOpen() with
 # "-O3 -fomit-frame-pointer" or "-O2 -fomit-frame-pointer
 # -finline-functions -frename-registers" (code is OK with sole -O2),
@@ -70,6 +67,7 @@ noinst_HEADERS = \
 # as it's broken in glibc 2.1.2 (bad header) and 2.1.3 (bad code)
 INCLUDES = \
 	-D__WINE__ \
+        -D__GSTREAMER__ \
 	-DWIN32_PATH=\"/usr/lib/win32\" \
 	-fno-omit-frame-pointer \
 	-mno-omit-leaf-frame-pointer
