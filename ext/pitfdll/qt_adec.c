@@ -347,8 +347,7 @@ qt_audiodec_chain (GstPad * pad, GstBuffer * buffer)
 					  &out_frames, &out_bytes)) {
       GST_ERROR ("Failed to decode");
       gst_buffer_unref (out);
-      g_mutex_unlock (dec->lock);
-      return;
+      goto beach;
     }
 
     data += frames * dec->in_framesize;
@@ -368,9 +367,9 @@ qt_audiodec_chain (GstPad * pad, GstBuffer * buffer)
   }
   gst_buffer_unref (buffer);
 
-  g_mutex_unlock (dec->lock);
   
 beach:
+  g_mutex_unlock (dec->lock);
   return ret;
 }
 
