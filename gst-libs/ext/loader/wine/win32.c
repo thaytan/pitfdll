@@ -1134,8 +1134,14 @@ static void WINAPI expGetSystemInfo(SYSTEM_INFO* si)
 		    PF[PF_RDTSC_INSTRUCTION_AVAILABLE] = TRUE;
 		if (strstr(value,"xmm"))
 		    PF[PF_XMMI_INSTRUCTIONS_AVAILABLE] = TRUE;
+		if (strstr(value,"sse2"))
+		    PF[PF_XMMI64_INSTRUCTIONS_AVAILABLE] = TRUE;
+		if (strstr(value,"ssse3"))
+		    PF[PF_SSE3_INSTRUCTIONS_AVAILABLE] = TRUE;
 		if (strstr(value,"3dnow"))
 		    PF[PF_AMD3D_INSTRUCTIONS_AVAILABLE] = TRUE;
+		if (strstr(value,"cx16"))
+		    PF[PF_COMPARE_EXCHANGE128] = TRUE;
 	    }
 	}
 	fclose (f);
