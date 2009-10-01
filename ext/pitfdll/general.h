@@ -2,6 +2,7 @@
 #define __GENERAL_H__
 
 #include <glib.h>
+#include <gst/gst.h>
 
 #define WAVE_FORMAT_PCM     1
 
@@ -48,5 +49,10 @@ typedef struct _CodecEntry {
   gchar *sinkcaps;
   gchar *srccaps;
 } CodecEntry;
+
+#define PITFDLL_CODEC_QDATA g_quark_from_string("pitfdll-codec")
+
+gboolean pitfdll_register_codecs (GstPlugin *plugin, const gchar *name_tmpl,
+    const CodecEntry codecs[], GTypeInfo *info);
 
 #endif /* __GENERAL_H__ */

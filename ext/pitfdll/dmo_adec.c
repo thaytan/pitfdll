@@ -65,7 +65,6 @@ static GstFlowReturn dmo_audiodec_chain (GstPad * pad, GstBuffer * buffer);
 static GstStateChangeReturn dmo_audiodec_change_state (GstElement * element,
     GstStateChange transition);
 
-static const CodecEntry *tmp;
 static GstElementClass *parent_class = NULL;
 
 /*
@@ -79,9 +78,11 @@ dmo_audiodec_base_init (DMOAudioDecClass * klass)
   GstElementDetails details;
   GstPadTemplate *src, *snk;
   GstCaps *srccaps, *sinkcaps;
+  const CodecEntry *tmp;
 
   /* element details */
-  klass->entry = tmp;
+  tmp = klass->entry = (CodecEntry *) g_type_get_qdata (G_OBJECT_CLASS_TYPE (klass),
+                                           PITFDLL_CODEC_QDATA);
   details.longname = g_strdup_printf ("DMO %s decoder version %d", tmp->dll,
                                       tmp->version);
   details.klass = "Codec/Decoder/Audio";
@@ -176,6 +177,7 @@ dmo_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   GstBuffer *extradata = NULL;
   GstCaps *out;
   gboolean ret = FALSE;
+  guint32 fourcc;
   
   GST_DEBUG_OBJECT (dec, "setcaps called with %" GST_PTR_FORMAT, caps);
 
@@ -198,6 +200,9 @@ dmo_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   if ((v = gst_structure_get_value (s, "codec_data")))
     extradata = gst_value_get_buffer (v);
 
+  if (!gst_structure_get_fourcc (s, "format", &fourcc))
+    fourcc = klass->entry->format;
+
   /* set up dll initialization */
   dll = g_strdup_printf ("%s.dll", klass->entry->dll);
   size = sizeof (WAVEFORMATEX) +
@@ -208,7 +213,7 @@ dmo_audiodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   	        GST_BUFFER_DATA (extradata), GST_BUFFER_SIZE (extradata));
     hdr->cbSize = GST_BUFFER_SIZE (extradata);
   }
-  hdr->wFormatTag = klass->entry->format;
+  hdr->wFormatTag = fourcc;
   hdr->nChannels = dec->channels;
   hdr->nSamplesPerSec = dec->rate;
   hdr->nAvgBytesPerSec = dec->bitrate / 8;
@@ -475,31 +480,6 @@ dmo_adec_register (GstPlugin * plugin)
     0,
     (GInstanceInitFunc) dmo_audiodec_init,
   };
-  gint n;
 
-  for (n = 0; codecs[n].dll != NULL; n++) {
-    gchar *full_path, *element_name;
-    GType type;
-
-    full_path = g_strdup_printf (WIN32_PATH "/%s.dll", codecs[n].dll);
-    if (!g_file_test (full_path, G_FILE_TEST_EXISTS)) {
-      g_free (full_path);
-      continue;
-    }
-    GST_DEBUG ("Registering %s (%s)", full_path, codecs[n].dll);
-    g_free (full_path);
-
-    element_name = g_strdup_printf ("dmodec_%sv%d", codecs[n].dll,
-                                    codecs[n].version);
-    tmp = &codecs[n];
-    type = g_type_register_static (GST_TYPE_ELEMENT, element_name, &info, 0);
-    if (!gst_element_register (plugin, element_name, GST_RANK_SECONDARY, type)) {
-      g_free (element_name);
-      return FALSE;
-    }
-    GST_DEBUG ("Registered %s", element_name);
-    g_free (element_name);
-  }
-
-  return TRUE;
+  return pitfdll_register_codecs (plugin, "dmodec_%sv%da", codecs, &info);
 }

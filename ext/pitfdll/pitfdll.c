@@ -24,8 +24,40 @@
 #include <gst/gst.h>
 
 #include "pitfdll.h"
+#include "general.h"
 
 GST_DEBUG_CATEGORY (pitfdll_debug);
+
+gboolean
+pitfdll_register_codecs (GstPlugin *plugin, const gchar *name_tmpl,
+    const CodecEntry codecs[], GTypeInfo *info)
+{
+  gint n;
+
+  for (n = 0; codecs[n].dll != NULL; n++) {
+    gchar *full_path, *element_name;
+    GType type;
+
+    full_path = g_strdup_printf (WIN32_PATH "/%s.dll", codecs[n].dll);
+    if (!g_file_test (full_path, G_FILE_TEST_EXISTS)) {
+      g_free (full_path);
+      continue;
+    }
+    GST_DEBUG ("Registering %s (%s)", full_path, codecs[n].dll);
+    g_free (full_path);
+
+    element_name = g_strdup_printf (name_tmpl, codecs[n].dll, codecs[n].version);
+    type = g_type_register_static (GST_TYPE_ELEMENT, element_name, info, 0);
+    g_type_set_qdata (type, PITFDLL_CODEC_QDATA, (gpointer) (codecs + n));
+    if (!gst_element_register (plugin, element_name, GST_RANK_SECONDARY, type)) {
+      g_free (element_name);
+      return FALSE;
+    }
+    GST_DEBUG ("Registered %s", element_name);
+    g_free (element_name);
+  }
+  return TRUE;
+}
 
 static gboolean
 plugin_init (GstPlugin * plugin)
