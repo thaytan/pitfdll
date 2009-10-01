@@ -255,6 +255,7 @@ void DMO_VideoDecoder_Flush (DMO_VideoDecoder * this)
 }
 
 int DMO_VideoDecoder_ProcessInput (DMO_VideoDecoder * this,
+                                   int is_keyframe,
                                    unsigned long long timestamp,
                                    unsigned long long duration,
                                    const void * in_data, unsigned int in_size,
@@ -263,6 +264,7 @@ int DMO_VideoDecoder_ProcessInput (DMO_VideoDecoder * this,
   CMediaBuffer * bufferin;
   unsigned long read = 0;
   int r = 0;
+  int flags = 0;
   
   if (!in_data)
 	  return -1;
@@ -271,26 +273,29 @@ int DMO_VideoDecoder_ProcessInput (DMO_VideoDecoder * this,
     Setup_FS_Segment ();
 #endif
 
-  /* REFERENCETIME is in 100 nanoseconds */
-  timestamp /= 100;
-  duration /= 100;  
   
   /* Creating the IMediaBuffer containing input data */
   bufferin = CMediaBufferCreate (in_size, (void *) in_data, in_size, 1);
   
-  if (duration) {
-    r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
-        this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
-				DMO_INPUT_DATA_BUFFERF_TIME |
-        DMO_INPUT_DATA_BUFFERF_TIMELENGTH |
-        DMO_INPUT_DATA_BUFFERF_SYNCPOINT,
-        timestamp, duration);
+  /* Signal SYNCPOINT only for keyframes */
+  if (is_keyframe)
+    flags |= DMO_INPUT_DATA_BUFFERF_SYNCPOINT;
+
+  if (duration != (unsigned long long)(-1)) {
+    flags |= DMO_INPUT_DATA_BUFFERF_TIMELENGTH;
+    /* REFERENCETIME is in 100 nanoseconds */
+    duration /= 100;  
   }
-  else {
-    r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
-          this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
-				  DMO_INPUT_DATA_BUFFERF_SYNCPOINT, 0, 0);
+
+  if (timestamp != (unsigned long long)(-1)) {
+    flags |= DMO_INPUT_DATA_BUFFERF_TIME;
+    /* REFERENCETIME is in 100 nanoseconds */
+    timestamp /= 100;
   }
+
+  r = this->m_pDMO_Filter->m_pMedia->vt->ProcessInput (
+         this->m_pDMO_Filter->m_pMedia, 0, (IMediaBuffer *) bufferin,
+	 flags, timestamp, duration);
 
  ((IMediaBuffer *) bufferin)->vt->GetBufferAndLength ((IMediaBuffer *) bufferin,
                                                       0, &read);
@@ -320,9 +325,6 @@ int DMO_VideoDecoder_ProcessOutput (DMO_VideoDecoder * this,
   unsigned long written = 0, status = 0, index;
   int r = 0;
   
-  if (!out_data)
-	  return -1;
-
 #ifdef LDT_paranoia
     Setup_FS_Segment ();
 #endif
@@ -358,11 +360,17 @@ int DMO_VideoDecoder_ProcessOutput (DMO_VideoDecoder * this,
   if (size_written)
 	  *size_written = written;
   
-  if (timestamp && duration &&
-      (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_TIME) &&
-      (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_TIMELENGTH)) {
-    *timestamp = db[0].rtTimestamp * 100;
-    *duration = db[0].rtTimelength * 100;
+  if (timestamp) {
+    if (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_TIME)
+      *timestamp = db[0].rtTimestamp * 100;
+    else
+      *timestamp = (unsigned long long) -1;
+  }
+  if (duration) {
+    if (db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_TIMELENGTH)
+      *duration = db[0].rtTimelength * 100;
+    else
+      *duration = (unsigned long long) -1;
   }
   
   if ((db[0].dwStatus & DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE) != 0) {

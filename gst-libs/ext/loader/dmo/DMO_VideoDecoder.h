@@ -20,6 +20,7 @@ int DMO_VideoDecoder_GetInputInfos (DMO_VideoDecoder * this,
                                     unsigned long * lookahead);
 
 int DMO_VideoDecoder_ProcessInput (DMO_VideoDecoder * this,
+                                   int is_keyframe,
                                    unsigned long long timestamp,
                                    unsigned long long duration,
                                    const void * in_data, unsigned int in_size,

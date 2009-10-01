@@ -46,6 +46,11 @@ typedef struct _DMOVideoDec {
   gulong out_align;
   gulong in_align;
   ldt_fs_t *ldt_fs;
+
+  GstSegment segment;
+  gboolean waiting_for_key;
+  gdouble proportion;
+  GstClockTime earliest_time;
 } DMOVideoDec;
 
 typedef struct _DMOVideoDecClass {
@@ -62,6 +67,10 @@ static GstFlowReturn dmo_videodec_chain (GstPad * pad, GstBuffer * buffer);
 static GstStateChangeReturn dmo_videodec_change_state (GstElement * element,
     GstStateChange transition);
 
+static gboolean dmo_videodec_src_event (GstPad * pad, GstEvent * event);
+
+static void dmo_videodec_reset_qos (DMOVideoDec * dmo_videodec);
+static void dmo_videodec_read_qos (DMOVideoDec * dmo_videodec, gdouble * proportion, GstClockTime * time);
 static GstElementClass *parent_class = NULL;
 
 /*
@@ -140,10 +149,13 @@ dmo_videodec_init (DMOVideoDec * dec)
   dec->srcpad = gst_pad_new_from_template (
       gst_element_class_get_pad_template (eklass, "src"), "src");
   gst_pad_use_fixed_caps (dec->srcpad);
+  gst_pad_set_event_function (dec->srcpad, dmo_videodec_src_event);
   gst_element_add_pad (GST_ELEMENT (dec), dec->srcpad);
 
   dec->ctx = NULL;
   dec->out_buffer = NULL;
+
+  gst_segment_init (&dec->segment, GST_FORMAT_TIME);
 }
 
 static void
@@ -247,6 +259,8 @@ dmo_videodec_sink_setcaps (GstPad * pad, GstCaps * caps)
   }
   gst_caps_unref (out);
   
+  dmo_videodec_reset_qos (dec);
+
   ret = TRUE;
   
 beach:
@@ -255,7 +269,73 @@ beach:
   return ret;
 }
 
-#define ALIGN_2(x) ((x+1)&~1)
+static gboolean
+dmo_videodec_do_qos (DMOVideoDec *dec, GstClockTime timestamp)
+{
+  GstClockTimeDiff diff;
+  gdouble proportion;
+  GstClockTime qostime, earliest_time;
+
+  /* no timestamp, can't do QoS */
+  if (G_UNLIKELY (!GST_CLOCK_TIME_IS_VALID (timestamp)))
+    goto no_qos;
+
+  /* get latest QoS observation values */
+  dmo_videodec_read_qos (dec, &proportion, &earliest_time);
+
+  /* skip qos if we have no observation (yet) */
+  if (G_UNLIKELY (!GST_CLOCK_TIME_IS_VALID (earliest_time))) {
+    goto no_qos;
+  }
+
+  /* qos is done on running time of the timestamp */
+  qostime = gst_segment_to_running_time (&dec->segment, GST_FORMAT_TIME,
+      timestamp);
+
+  /* timestamp can be out of segment, then we don't do QoS */
+  if (G_UNLIKELY (!GST_CLOCK_TIME_IS_VALID (qostime)))
+    goto no_qos;
+
+  /* see how our next timestamp relates to the latest qos timestamp. negative
+   * values mean we are early, positive values mean we are too late. */
+  diff = GST_CLOCK_DIFF (qostime, earliest_time);
+
+  GST_DEBUG_OBJECT (dec, "QOS: qostime %" GST_TIME_FORMAT
+      ", earliest %" GST_TIME_FORMAT, GST_TIME_ARGS (qostime),
+      GST_TIME_ARGS (earliest_time));
+
+  /* if we using less than 40% of the available time, we can try to
+   * speed up again when we were slow. */
+  if (proportion < 0.4 && diff < 0) {
+    goto no_qos;
+  } else {
+    /* if we're more than two seconds late, switch to the next keyframe */
+    /* FIXME, let the demuxer decide what's the best since we might be dropping
+     * a lot of frames when the keyframe is far away or we even might not get a new
+     * keyframe at all.. */
+    if (diff > ((GstClockTimeDiff) GST_SECOND * 2)
+        && !dec->waiting_for_key) {
+      goto skip_to_keyframe;
+    } else if (diff >= GST_SECOND/30) {
+      goto skipping;
+    }
+  }
+
+no_qos:
+  return TRUE;
+
+skipping:
+  GST_DEBUG_OBJECT (dec, "QOS: Skipping frame. diff %" G_GINT64_FORMAT, diff);
+  return FALSE;
+skip_to_keyframe:
+  {
+    // ->waiting_for_key = TRUE;
+    GST_DEBUG_OBJECT (dec,
+        "QOS: keyframe, %" G_GINT64_FORMAT " > GST_SECOND/2", diff);
+    /* we can skip the current frame */
+    return FALSE;
+  }
+}
 
 static GstFlowReturn
 dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
@@ -264,6 +344,7 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
   DMOVideoDec *dec = (DMOVideoDec *) gst_pad_get_parent (pad);
   GstBuffer *in_buffer = NULL;
   guint read = 0, wrote = 0, status;
+  gboolean is_keyframe;
 
   Check_FS_Segment ();
 
@@ -273,8 +354,11 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
     goto beach;
   }
   
-  /* encode */
+  is_keyframe = !GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
+
+  /* pass encoded data to decoder */
   status = DMO_VideoDecoder_ProcessInput (dec->ctx,
+                                          is_keyframe,
                                           GST_BUFFER_TIMESTAMP (buffer),
                                           GST_BUFFER_DURATION (buffer),
                                           GST_BUFFER_DATA (buffer),
@@ -305,31 +389,47 @@ dmo_videodec_chain (GstPad * pad, GstBuffer * buffer)
   GST_BUFFER_DURATION (dec->out_buffer) += GST_BUFFER_DURATION (buffer);
   
   if (status == FALSE) {
-    GstClockTime timestamp = GST_BUFFER_TIMESTAMP (dec->out_buffer);
+    GstClockTime timestamp = GST_BUFFER_TIMESTAMP (buffer);
+    GstClockTime duration = GST_BUFFER_DURATION (buffer);
     GST_DEBUG ("we have some output buffers to collect (size is %d)",
                GST_BUFFER_SIZE (dec->out_buffer));
     /* Loop until the last buffer (returns FALSE) */
-    while ((status = DMO_VideoDecoder_ProcessOutput (dec->ctx,
-                           GST_BUFFER_DATA (dec->out_buffer),
-                           GST_BUFFER_SIZE (dec->out_buffer),
-                           &wrote,
-                           &(GST_BUFFER_TIMESTAMP (dec->out_buffer)),
-                           &(GST_BUFFER_DURATION (dec->out_buffer)))) == TRUE) {
-      GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
-                 wrote, GST_BUFFER_TIMESTAMP (dec->out_buffer), GST_BUFFER_DURATION (dec->out_buffer));
-      GST_BUFFER_SIZE (dec->out_buffer) = wrote;
-      ret = gst_pad_push (dec->srcpad, dec->out_buffer);
-      dec->out_buffer = gst_buffer_new_and_alloc (dec->out_buffer_size);
-      /* If the DMO can not set the timestamp we do our best guess */
-      GST_BUFFER_TIMESTAMP (dec->out_buffer) = timestamp;
-      GST_BUFFER_DURATION (dec->out_buffer) = 0;
-    }
-    GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
-               GST_BUFFER_TIMESTAMP (dec->out_buffer),
-               GST_BUFFER_DURATION (dec->out_buffer));
-    GST_BUFFER_SIZE (dec->out_buffer) = wrote;
-    ret = gst_pad_push (dec->srcpad, dec->out_buffer);
-    dec->out_buffer = NULL;
+    do {
+      if (dmo_videodec_do_qos (dec, timestamp)) {
+        status = DMO_VideoDecoder_ProcessOutput (dec->ctx,
+                             GST_BUFFER_DATA (dec->out_buffer),
+                             GST_BUFFER_SIZE (dec->out_buffer),
+                             &wrote,
+                             &(GST_BUFFER_TIMESTAMP (dec->out_buffer)),
+                             &(GST_BUFFER_DURATION (dec->out_buffer)));
+
+        if (status) {
+          GST_DEBUG ("there is another output buffer to collect, pushing %d bytes timestamp %llu duration %llu",
+                     wrote, GST_BUFFER_TIMESTAMP (dec->out_buffer), GST_BUFFER_DURATION (dec->out_buffer));
+        }
+        GST_BUFFER_SIZE (dec->out_buffer) = wrote;
+        GST_DEBUG ("pushing %d bytes timestamp %llu duration %llu", wrote,
+                   GST_BUFFER_TIMESTAMP (dec->out_buffer),
+                   GST_BUFFER_DURATION (dec->out_buffer));
+        ret = gst_pad_push (dec->srcpad, dec->out_buffer);
+        dec->out_buffer = NULL;
+  
+        if (status) {
+          dec->out_buffer = gst_buffer_new_and_alloc (dec->out_buffer_size);
+          /* If the DMO can not set the timestamp we do our best guess */
+          GST_BUFFER_TIMESTAMP (dec->out_buffer) = timestamp;
+          GST_BUFFER_DURATION (dec->out_buffer) = 0;
+        }
+      }
+      else {
+        /* Skip the frame */
+        status = DMO_VideoDecoder_ProcessOutput (dec->ctx, NULL, 0, NULL, &timestamp, &duration);
+        GST_DEBUG_OBJECT (dec, "skipped frame with ts %" GST_TIME_FORMAT " dur %" GST_TIME_FORMAT,
+            GST_TIME_ARGS (timestamp), GST_TIME_ARGS (duration));
+        if (GST_CLOCK_TIME_IS_VALID (timestamp) && GST_CLOCK_TIME_IS_VALID (duration))
+          timestamp += duration;
+      }
+    } while (status);
   }
   
 beach:
@@ -384,21 +484,31 @@ dmo_videodec_sink_event (GstPad * pad, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_FLUSH_STOP:
       DMO_VideoDecoder_Flush (dec->ctx);
+      dmo_videodec_reset_qos (dec);
+      gst_segment_init (&dec->segment, GST_FORMAT_TIME);
       res = gst_pad_event_default (pad, event);
       break;
     case GST_EVENT_NEWSEGMENT:
     {
-      gint64 segment_start, segment_stop, segment_base;
-      gdouble segment_rate;
+      gint64 start, stop, time;
+      gdouble rate, arate;
       GstFormat format;
       gboolean update;
 
-      gst_event_parse_new_segment (event, &update, &segment_rate, &format,
-                                  &segment_start, &segment_stop, &segment_base);
+      gst_event_parse_new_segment_full (event, &update, &rate, &arate, &format,
+                                  &start, &stop, &time);
 
-      if (format == GST_FORMAT_TIME) {
-        GST_DEBUG ("newsegment ! implement me !");
+      if (format != GST_FORMAT_TIME) {
+        goto wrong_format;
       }
+
+      GST_DEBUG_OBJECT (dec,
+          "NEWSEGMENT in time start %" GST_TIME_FORMAT " -- stop %"
+          GST_TIME_FORMAT, GST_TIME_ARGS (start), GST_TIME_ARGS (stop));
+
+      /* and store the values */
+      gst_segment_set_newsegment_full (&dec->segment, update,
+          rate, arate, format, start, stop, time);
 
       res = gst_pad_event_default (pad, event);
       break;
@@ -407,6 +517,73 @@ dmo_videodec_sink_event (GstPad * pad, GstEvent * event)
       res = gst_pad_event_default (pad, event);
       break;
   }
+  gst_object_unref (dec);
+  return res;
+
+wrong_format:
+  GST_ELEMENT_ERROR (dec, CORE, NEGOTIATION, (NULL), ("Input segment is not in TIME format"));
+
+  gst_object_unref (dec);
+  gst_event_unref (event);
+  return FALSE;
+}
+
+static void
+dmo_videodec_update_qos (DMOVideoDec * dmo_videodec, gdouble proportion,
+    GstClockTime time)
+{
+  GST_OBJECT_LOCK (dmo_videodec);
+  dmo_videodec->proportion = proportion;
+  dmo_videodec->earliest_time = time;
+  GST_OBJECT_UNLOCK (dmo_videodec);
+}
+
+static void
+dmo_videodec_reset_qos (DMOVideoDec * dmo_videodec)
+{
+  dmo_videodec_update_qos (dmo_videodec, 0.5, GST_CLOCK_TIME_NONE);
+}
+
+static void
+dmo_videodec_read_qos (DMOVideoDec * dmo_videodec, gdouble * proportion,
+    GstClockTime * time)
+{
+  GST_OBJECT_LOCK (dmo_videodec);
+  *proportion = dmo_videodec->proportion;
+  *time = dmo_videodec->earliest_time;
+  GST_OBJECT_UNLOCK (dmo_videodec);
+}
+
+static gboolean
+dmo_videodec_src_event(GstPad * pad, GstEvent * event)
+{
+  gboolean res = TRUE;
+  DMOVideoDec *dec = (DMOVideoDec *) gst_pad_get_parent (pad);
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_QOS:
+    {
+      gdouble proportion;
+      GstClockTimeDiff diff;
+      GstClockTime timestamp;
+
+      gst_event_parse_qos (event, &proportion, &diff, &timestamp);
+
+      /* update our QoS values */
+      dmo_videodec_update_qos (dec, proportion, timestamp + diff);
+
+      /* forward upstream */
+      res = gst_pad_push_event (dec->sinkpad, event);
+      break;
+    }
+    default:
+      /* forward upstream */
+      res = gst_pad_push_event (dec->sinkpad, event);
+      break;
+  }
+
+  gst_object_unref (dec);
+
   return res;
 }
 
