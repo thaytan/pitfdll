@@ -433,7 +433,12 @@ static const CodecEntry codecs[] = {
   { "wmvdmod", { 0x82d353df, 0x90bd, 0x4382,
 		 0x8b, 0xc2, 0x3f, 0x61, 0x92, 0xb7, 0x6e, 0x34 },
     GST_MAKE_FOURCC ('W', 'M', 'V', '3'), 3, "Windows Media Video",
-    "video/x-wmv, wmvversion = (int) 3",
+    "video/x-wmv, wmvversion = (int) 3, format = (fourcc) WMV3",
+    "video/x-raw-yuv, format= (fourcc) YUY2" },
+  { "wvc1dmod", { 0xc9bfbccf, 0xe60e, 0x4588,
+                 0xa3, 0xdf, 0x5a, 0x03, 0xb1, 0xfd, 0x95, 0x85 },
+    GST_MAKE_FOURCC ('W', 'V', 'C', '1'), 3, "Windows Media Video",
+    "video/x-wmv, wmvversion = (int) 3, format = (fourcc) WVC1",
     "video/x-raw-yuv, format= (fourcc) YUY2" },
   { NULL }
 };
