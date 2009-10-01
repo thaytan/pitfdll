@@ -59,6 +59,10 @@ for DLL to know too much about its environment.
 
 #ifdef __GSTREAMER__
 #include <gst/gst.h>
+
+#define GST_CAT_DEFAULT pitfdll_debug
+GST_DEBUG_CATEGORY_EXTERN (GST_CAT_DEFAULT);
+
 #endif
 
 #if HAVE_VSSCANF
@@ -220,15 +224,27 @@ static inline void dbgprintf(char* fmt, ...)
 	va_end(va);
     }
 #endif
-#ifdef __GSTREAMER__
+#if defined (__GSTREAMER__)
 	va_list va;
 	
 	va_start(va, fmt);
-        gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_WARNING, "", "", 0, NULL, fmt, va);
+        gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_DEBUG, __FILE__, GST_FUNCTION, __LINE__, NULL, fmt, va);
         va_end(va);
 #endif
 }
 
+#if defined (__GSTREAMER__)
+static inline void warnprintf(char* fmt, ...)
+{
+	va_list va;
+	
+	va_start(va, fmt);
+        gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_WARNING, __FILE__, GST_FUNCTION, __LINE__, NULL, fmt, va);
+        va_end(va);
+}
+#else
+#define warnprintf dbgprintf
+#endif
 
 char export_names[300][32]={
     "name1",
@@ -5263,7 +5279,8 @@ no_dll:
 /* xine: pos is now tested inside add_stub()
     if(pos>150)return 0;
 */
-    sprintf(export_names[pos], "%s:%d", library, ordinal);
+    warnprintf("Adding DLL stub for unimplemented func %s:%d", library, ordinal);
+    sprintf(export_names[pos], "%s:%d\n", library, ordinal);
     return add_stub();
 }
 
@@ -5298,7 +5315,7 @@ void* LookupExternalByName(const char* library, const char* name)
 /* xine: pos is now tested inside add_stub()
     if(pos>150)return 0;// to many symbols
 */
-    dbgprintf("function %s not found!\n", name);
+    warnprintf("function %s not found!\n", name);
     strcpy(export_names[pos], name);
     return add_stub();
 }
