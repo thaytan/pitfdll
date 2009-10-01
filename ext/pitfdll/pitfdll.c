@@ -27,6 +27,7 @@
 #include "general.h"
 
 GST_DEBUG_CATEGORY (pitfdll_debug);
+GST_DEBUG_CATEGORY (pitfdll_win32_debug);
 
 gboolean
 pitfdll_register_codecs (GstPlugin *plugin, const gchar *name_tmpl,
@@ -63,6 +64,7 @@ static gboolean
 plugin_init (GstPlugin * plugin)
 {
   GST_DEBUG_CATEGORY_INIT (pitfdll_debug, "pitfdll", 0, "PitfDLL elements");
+  GST_DEBUG_CATEGORY_INIT (pitfdll_win32_debug, "pitfdllwin32", 0, "PitfDLL elements win32 loader debug");
 
   gst_plugin_add_dependency_simple (plugin, NULL, WIN32_PATH, NULL, GST_PLUGIN_DEPENDENCY_FLAG_NONE);
   dshow_vdec_register (plugin);

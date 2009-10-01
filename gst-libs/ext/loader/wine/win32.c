@@ -60,7 +60,7 @@ for DLL to know too much about its environment.
 #ifdef __GSTREAMER__
 #include <gst/gst.h>
 
-#define GST_CAT_DEFAULT pitfdll_debug
+#define GST_CAT_DEFAULT pitfdll_win32_debug
 GST_DEBUG_CATEGORY_EXTERN (GST_CAT_DEFAULT);
 
 #endif
