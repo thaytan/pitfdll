@@ -60,6 +60,8 @@ fi
 AC_HEADER_STDC([])
 AC_CHECK_HEADERS(sys/mman.h)
 
+AC_CHECK_FUNCS(vsscanf)
+
 dnl check for gstreamer; uninstalled is selected preferentially -- see pkg-config(1)
 PKG_CHECK_MODULES(GST, gstreamer-$GST_MAJORMINOR >= $GST_REQ \
 		       gstreamer-base-$GST_MAJORMINOR >= $GST_REQ \
